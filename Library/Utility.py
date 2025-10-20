@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-
 import numpy as np
+from typing import Callable
+from numpy.typing import NDArray
 
 
 UST_TENOR_MAP = {
@@ -21,3 +22,35 @@ UST_TENOR_MAP = {
     '20y': np.array(20.),
     '30y': np.array(30.)
 }
+
+
+def get_fixings_vec(number_of_fixings: np.uint64, expiry: np.float64) -> NDArray[np.float64]:
+    return np.array([(i + 1.) * expiry / number_of_fixings for i in range(number_of_fixings)], dtype=np.float64)
+
+
+def year_frac(base_days: np.int64) -> Callable:
+
+    if base_days == np.int64(252):
+        return _actual_252
+    elif base_days == np.int64(360):
+        return _actual_360
+    elif base_days == np.int64(365):
+        return _actual_365
+
+
+def _actual_252(time1: NDArray[np.float64], time2: NDArray[np.float64]) -> NDArray[np.float64]:
+    time1 = np.array(time1).reshape(-1, 1)
+    time2 = np.array(time2).reshape(-1, 1)
+    return (time2 - time1) / 252.
+
+
+def _actual_360(time1: NDArray[np.float64], time2: NDArray[np.float64]) -> NDArray[np.float64]:
+    time1 = np.array(time1).reshape(-1, 1)
+    time2 = np.array(time2).reshape(-1, 1)
+    return (time2 - time1) / 360.
+
+
+def _actual_365(time1: NDArray[np.float64], time2: NDArray[np.float64]) -> NDArray[np.float64]:
+    time1 = np.array(time1).reshape(-1, 1)
+    time2 = np.array(time2).reshape(-1, 1)
+    return (time2 - time1) / 365.
