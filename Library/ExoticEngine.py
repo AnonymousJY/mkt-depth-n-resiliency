@@ -183,7 +183,7 @@ class ExoticEngineKimYi(ExoticEngine):
         # self.generator_ptr.reset_dimensionality(new_dimensionality=self.number_of_fixings) # not used now
         self.scaled_lamb = np.zeros(shape=(self.number_of_fixings, 1))
 
-        t1, t2 = np.float64(0), np.float64(1)
+        t1, t2 = np.array(0), np.array(1)
         self.eta1 = eta1.integral(time1=t1, time2=t2)
         self.eta2 = eta2.integral(time1=t1, time2=t2)
         self.p_prob = p_prob.integral(time1=t1, time2=t2)
@@ -235,7 +235,7 @@ class ExoticEngineKimYi(ExoticEngine):
         # print(psi_variance.shape)
         drift_const = risk_free_rate.integral(t1, t2) - dividend_yield_vec - 0.5 * psi_variance - lamb.integral(t1, t2) * zeta
 
-        t1, t2 = np.float64(0), self.times[0]
+        t1, t2 = np.array(0), self.times[0]
         delta_t = t2 - t1
         self.drifts[:, :, 0] = drift_const * delta_t
         self.stddev[:, :, 0] = np.sqrt(psi_variance * delta_t)
@@ -254,12 +254,12 @@ class ExoticEngineKimYi(ExoticEngine):
     def get_paths(self, spot_values: NDArray[np.float64]) -> None:
         self.generator_ptr.get_gaussian(self.variates_cont)
         self.generator_ptr.get_poisson(lamb=self.scaled_lamb.reshape(1, -1), variates=self.variates_jump_bins)
-        self.generator_ptr.get_asymmetric_double_exponential(
+        self.generator_ptr.get_aded(
             variates=self.variates_jump_size,
             n=self.variates_jump_bins,
             eta1=self.eta1,
             eta2=self.eta2,
-            p_prob=self.p_prob
+            pprob=self.p_prob
         )
 
         current_log_spot = self.log_spot[:, :, 0]

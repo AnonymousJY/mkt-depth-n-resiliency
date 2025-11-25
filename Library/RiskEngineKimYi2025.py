@@ -8,10 +8,14 @@ import arviz as az
 import pytensor.tensor as pt
 
 from typing import Tuple, List, Literal
+from collections import namedtuple
 from numpy.typing import NDArray
 from Library.StatisticsMC import get_corr_mat
 from Library.Random import RandomBase, RandomMT19937
 from Library.Parameters import ParametersBase, ParametersConstant
+
+
+ParamsResults = namedtuple('ParamsResult', ["dMEAN", "dCI_LOWER", "dCI_UPPER"])
 
 
 def simulate_shock_returns(
@@ -121,14 +125,13 @@ def _dist_loglike_idiosyncratic(y, mui, kappai, gammai, betai, rhoix, alpha, sig
 
 
 def pmle_kimyirisk_systematic(
-        valuation_date: str,
-        sys_returns_df: pd.Series,
+        sys_returns: NDArray[np.float64],
         delta_t: NDArray[np.float64],
         seed_number: np.uint64 = np.uint64(20250101),
         n_mc_paths: int = 10_000,
         nuts_sampler: Literal["pymc", "nutpie", "jax", "numpyro", "blackjax"] = "nutpie",
         is_progress_bar: bool = False
-) -> pd.DataFrame:
+) -> dict:
     SEED = np.uint64(seed_number)
 
     N_SIMS_MCMC = n_mc_paths
@@ -146,7 +149,7 @@ def pmle_kimyirisk_systematic(
         eta1 = pm.Gamma(name="eta1", alpha=50., beta=1.)
         eta2 = pm.Gamma(name="eta2", alpha=25., beta=1.)
 
-        observed_data = np.cumsum(sys_returns_df.to_numpy()).reshape((-1, 1))
+        observed_data = np.cumsum(sys_returns).reshape((-1, 1))
 
         pm.CustomDist(
             "likelihood",
@@ -172,11 +175,6 @@ def pmle_kimyirisk_systematic(
     column_ci_lower = columns[2]
     column_ci_upper = columns[3]
 
-    est_mui = np.array(.0)
-    est_kappai = np.array(.0)
-    est_gammai = np.array(1.)
-    est_betai = np.array(1.)
-    est_rhoix = np.array(.0)
     est_alpha = np.exp(params_sys_df.xs('alpha').xs(column_mean))
     est_sigma = params_sys_df.xs('sigma').xs(column_mean)
     est_pprob = np.exp(params_sys_df.xs('pprob').xs(column_mean))
@@ -184,16 +182,6 @@ def pmle_kimyirisk_systematic(
     est_eta1 = params_sys_df.xs('eta1').xs(column_mean)
     est_eta2 = params_sys_df.xs('eta2').xs(column_mean)
 
-    est_mui_ci_lower = np.array(0.)
-    est_mui_ci_upper = np.array(0.)
-    est_kappai_ci_lower = np.array(0.)
-    est_kappai_ci_upper = np.array(0.)
-    est_gammai_ci_lower = np.array(1.)
-    est_gammai_ci_upper = np.array(1.)
-    est_betai_ci_lower = np.array(1.)
-    est_betai_ci_upper = np.array(1.)
-    est_rhoix_ci_lower = np.array(0.)
-    est_rhoix_ci_upper = np.array(0.)
     est_alpha_ci_lower = np.exp(params_sys_df.xs('alpha').xs(column_ci_lower))
     est_alpha_ci_upper = np.exp(params_sys_df.xs('alpha').xs(column_ci_upper))
     est_sigma_ci_lower = params_sys_df.xs('sigma').xs(column_ci_lower)
@@ -207,68 +195,36 @@ def pmle_kimyirisk_systematic(
     est_eta2_ci_lower = params_sys_df.xs('eta2').xs(column_ci_lower)
     est_eta2_ci_upper = params_sys_df.xs('eta2').xs(column_ci_upper)
 
-    tmp = {
-        'dtVALUATION_DATE': pd.to_datetime(valuation_date),
-        'sUNDERLYING_NAME': sys_returns_df.name,
-        'dMUI': est_mui,
-        'dKAPPAI': est_kappai,
-        'dGAMMAI': est_gammai,
-        'dBETAI': est_betai,
-        'dRHOIX': est_rhoix,
-        'dALPHA': est_alpha,
-        'dSIGMA': est_sigma,
-        'dPPROB': est_pprob,
-        'dLAMB': est_lamb,
-        'dETA1': est_eta1,
-        'dETA2': est_eta2,
-        'dMUI_CI_LOWER': est_mui_ci_lower,
-        'dMUI_CI_UPPER': est_mui_ci_upper,
-        'dKAPPAI_CI_LOWER': est_kappai_ci_lower,
-        'dKAPPAI_CI_UPPER': est_kappai_ci_upper,
-        'dGAMMAI_CI_LOWER': est_gammai_ci_lower,
-        'dGAMMAI_CI_UPPER': est_gammai_ci_upper,
-        'dBETAI_CI_LOWER': est_betai_ci_lower,
-        'dBETAI_CI_UPPER': est_betai_ci_upper,
-        'dRHOIX_CI_LOWER': est_rhoix_ci_lower,
-        'dRHOIX_CI_UPPER': est_rhoix_ci_upper,
-        'dALPHA_CI_LOWER': est_alpha_ci_lower,
-        'dALPHA_CI_UPPER': est_alpha_ci_upper,
-        'dSIGMA_CI_LOWER': est_sigma_ci_lower,
-        'dSIGMA_CI_UPPER': est_sigma_ci_upper,
-        'dPPROB_CI_LOWER': est_pprob_ci_lower,
-        'dPPROB_CI_UPPER': est_pprob_ci_upper,
-        'dLAMB_CI_LOWER': est_lamb_ci_lower,
-        'dLAMB_CI_UPPER': est_lamb_ci_upper,
-        'dETA1_CI_LOWER': est_eta1_ci_lower,
-        'dETA1_CI_UPPER': est_eta1_ci_upper,
-        'dETA2_CI_LOWER': est_eta2_ci_lower,
-        'dETA2_CI_UPPER': est_eta2_ci_upper,
+    return {
+        'dALPHA': ParamsResults(dMEAN=est_alpha, dCI_LOWER=est_alpha_ci_lower, dCI_UPPER=est_alpha_ci_upper),
+        'dSIGMA': ParamsResults(dMEAN=est_sigma, dCI_LOWER=est_sigma_ci_lower, dCI_UPPER=est_sigma_ci_upper),
+        'dPPROB': ParamsResults(dMEAN=est_pprob, dCI_LOWER=est_pprob_ci_lower, dCI_UPPER=est_pprob_ci_upper),
+        'dLAMB': ParamsResults(dMEAN=est_lamb, dCI_LOWER=est_lamb_ci_lower, dCI_UPPER=est_lamb_ci_upper),
+        'dETA1': ParamsResults(dMEAN=est_eta1, dCI_LOWER=est_eta1_ci_lower, dCI_UPPER=est_eta1_ci_upper),
+        'dETA2': ParamsResults(dMEAN=est_eta2, dCI_LOWER=est_eta2_ci_lower, dCI_UPPER=est_eta2_ci_upper)
     }
-
-    return pd.DataFrame().from_dict(tmp, orient='index').T
 
 
 def pmle_kimyirisk_idiosyncratic(
-        valuation_date: str,
-        idi_returns_df: pd.Series,
-        params_sys_df: pd.Series,
+        idi_returns: NDArray[np.float64],
+        params_sys: dict,
         delta_t: NDArray[np.float64],
         seed_number: np.uint64 = 20250101,
         n_mc_paths: int = 10_000,
         nuts_sampler: Literal["pymc", "nutpie", "jax", "numpyro", "blackjax"] = "nutpie",
         is_progress_bar: bool = False
-) -> pd.DataFrame:
+) -> dict:
     SEED = np.uint64(seed_number)
     Delta_t = delta_t
 
     N_SIMS_MCMC = n_mc_paths
 
-    alpha = params_sys_df.dALPHA
-    sigma = params_sys_df.dSIGMA
-    pprob = params_sys_df.dPPROB
-    lamb = params_sys_df.dLAMB
-    eta1 = params_sys_df.dETA1
-    eta2 = params_sys_df.dETA2
+    alpha = params_sys["dALPHA"]
+    sigma = params_sys["dSIGMA"]
+    pprob = params_sys["dPPROB"]
+    lamb = params_sys["dLAMB"]
+    eta1 = params_sys["dETA1"]
+    eta2 = params_sys["dETA2"]
 
     with pm.Model():
         mui = pm.Normal(name="mui")
@@ -286,7 +242,7 @@ def pmle_kimyirisk_idiosyncratic(
         loc, scale = -1., 2.
         rhoix = pm.Deterministic("rhoix", pt.arctanh((scale * rhoix_rv) + loc))
 
-        observed_data = np.cumsum(idi_returns_df.to_numpy()).reshape((-1, 1))
+        observed_data = np.cumsum(idi_returns).reshape((-1, 1))
 
         pm.CustomDist(
             "likelihood",
@@ -322,12 +278,6 @@ def pmle_kimyirisk_idiosyncratic(
     est_gammai = np.exp(params_idi_df.xs('gammai').xs(column_mean))
     est_betai = np.exp(params_idi_df.xs('betai').xs(column_mean))
     est_rhoix = np.tanh(params_idi_df.xs('rhoix').xs(column_mean))
-    est_alpha = params_sys_df.dALPHA
-    est_sigma = params_sys_df.dSIGMA
-    est_pprob = params_sys_df.dPPROB
-    est_lamb = params_sys_df.dLAMB
-    est_eta1 = params_sys_df.dETA1
-    est_eta2 = params_sys_df.dETA2
 
     est_mui_ci_lower = params_idi_df.xs('mui').xs(column_ci_lower)
     est_mui_ci_upper = params_idi_df.xs('mui').xs(column_ci_upper)
@@ -339,58 +289,14 @@ def pmle_kimyirisk_idiosyncratic(
     est_betai_ci_upper = np.exp(params_idi_df.xs('betai').xs(column_ci_upper))
     est_rhoix_ci_lower = np.tanh(params_idi_df.xs('rhoix').xs(column_ci_lower))
     est_rhoix_ci_upper = np.tanh(params_idi_df.xs('rhoix').xs(column_ci_upper))
-    est_alpha_ci_lower = params_sys_df.dALPHA_CI_LOWER
-    est_alpha_ci_upper = params_sys_df.dALPHA_CI_UPPER
-    est_sigma_ci_lower = params_sys_df.dSIGMA_CI_LOWER
-    est_sigma_ci_upper = params_sys_df.dSIGMA_CI_UPPER
-    est_pprob_ci_lower = params_sys_df.dPPROB_CI_LOWER
-    est_pprob_ci_upper = params_sys_df.dPPROB_CI_UPPER
-    est_lamb_ci_lower = params_sys_df.dLAMB_CI_LOWER
-    est_lamb_ci_upper = params_sys_df.dLAMB_CI_UPPER
-    est_eta1_ci_lower = params_sys_df.dETA1_CI_LOWER
-    est_eta1_ci_upper = params_sys_df.dETA1_CI_UPPER
-    est_eta2_ci_lower = params_sys_df.dETA2_CI_LOWER
-    est_eta2_ci_upper = params_sys_df.dETA2_CI_UPPER
 
-    tmp = {
-        'dtVALUATION_DATE': pd.to_datetime(valuation_date),
-        'sUNDERLYING_NAME': idi_returns_df.name,
-        'dMUI': est_mui,
-        'dKAPPAI': est_kappai,
-        'dGAMMAI': est_gammai,
-        'dBETAI': est_betai,
-        'dRHOIX': est_rhoix,
-        'dALPHA': est_alpha,
-        'dSIGMA': est_sigma,
-        'dPPROB': est_pprob,
-        'dLAMB': est_lamb,
-        'dETA1': est_eta1,
-        'dETA2': est_eta2,
-        'dMUI_CI_LOWER': est_mui_ci_lower,
-        'dMUI_CI_UPPER': est_mui_ci_upper,
-        'dKAPPAI_CI_LOWER': est_kappai_ci_lower,
-        'dKAPPAI_CI_UPPER': est_kappai_ci_upper,
-        'dGAMMAI_CI_LOWER': est_gammai_ci_lower,
-        'dGAMMAI_CI_UPPER': est_gammai_ci_upper,
-        'dBETAI_CI_LOWER': est_betai_ci_lower,
-        'dBETAI_CI_UPPER': est_betai_ci_upper,
-        'dRHOIX_CI_LOWER': est_rhoix_ci_lower,
-        'dRHOIX_CI_UPPER': est_rhoix_ci_upper,
-        'dALPHA_CI_LOWER': est_alpha_ci_lower,
-        'dALPHA_CI_UPPER': est_alpha_ci_upper,
-        'dSIGMA_CI_LOWER': est_sigma_ci_lower,
-        'dSIGMA_CI_UPPER': est_sigma_ci_upper,
-        'dPPROB_CI_LOWER': est_pprob_ci_lower,
-        'dPPROB_CI_UPPER': est_pprob_ci_upper,
-        'dLAMB_CI_LOWER': est_lamb_ci_lower,
-        'dLAMB_CI_UPPER': est_lamb_ci_upper,
-        'dETA1_CI_LOWER': est_eta1_ci_lower,
-        'dETA1_CI_UPPER': est_eta1_ci_upper,
-        'dETA2_CI_LOWER': est_eta2_ci_lower,
-        'dETA2_CI_UPPER': est_eta2_ci_upper,
+    return {
+        'dMUI': ParamsResults(dMEAN=est_mui, dCI_LOWER=est_mui_ci_lower, dCI_UPPER=est_mui_ci_upper),
+        'dKAPPAI': ParamsResults(dMEAN=est_kappai, dCI_LOWER=est_kappai_ci_lower, dCI_UPPER=est_kappai_ci_upper),
+        'dGAMMAI': ParamsResults(dMEAN=est_gammai, dCI_LOWER=est_gammai_ci_lower, dCI_UPPER=est_gammai_ci_upper),
+        'dBETAI': ParamsResults(dMEAN=est_betai, dCI_LOWER=est_betai_ci_lower, dCI_UPPER=est_betai_ci_upper),
+        'dRHOIX': ParamsResults(dMEAN=est_rhoix, dCI_LOWER=est_rhoix_ci_lower, dCI_UPPER=est_rhoix_ci_upper)
     }
-
-    return pd.DataFrame().from_dict(tmp, orient='index').T
 
 
 class KimYiRiskEngine:

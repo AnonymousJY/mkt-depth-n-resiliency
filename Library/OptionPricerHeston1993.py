@@ -4,6 +4,7 @@
 import numpy as np
 from numpy.typing import NDArray
 from scipy.integrate import quad
+# from Library.ImportLibs import *
 
 
 def heston_call(
@@ -399,6 +400,10 @@ def _a(
 
 
 if __name__=='__main__':
+    import time
+
+    beg = time.perf_counter()
+
     S0 = [100., 100.]  # initial asset price
     K = [100., 120.]  # strike
     v0 = 0.1  # initial variance
@@ -439,5 +444,8 @@ if __name__=='__main__':
         risk_free_rate=np.array(r).reshape((-1, 1)),
         dividend_yield=np.array(d).reshape((-1, 1))
     )
-
     print(put_price)
+
+    end = time.perf_counter()
+
+    print(f"Time took {end - beg:.4f} s")
