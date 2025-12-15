@@ -22,7 +22,7 @@ def simulate_shock_returns(
         params: pd.Series,
         rng: RandomBase,
         size: Tuple[int, int, int],
-        delta_time: NDArray[np.float64]=np.array(1/365)
+        delta_time: NDArray[np.float64]=np.array(1/252)
 ) -> NDArray[np.float64]:
 
     ret, _, _ = KimYiRiskEngine(
@@ -46,7 +46,7 @@ def simulate_shock_returns_base(
         params: pd.Series,
         rng: RandomBase,
         size: Tuple[int, int, int],
-        delta_time: NDArray[np.float64]=np.array(1/365)
+        delta_time: NDArray[np.float64]=np.array(1/252)
 ) -> NDArray[np.float64]:
 
     ret, _, _ = KimYiRiskEngine(
@@ -69,7 +69,7 @@ def simulate_shock_returns_base(
 def est_liquidity_process(
         params: pd.Series,
         observed_data: NDArray[np.float64],
-        delta_time: NDArray[np.float64]=np.array(1/365)
+        delta_time: NDArray[np.float64]=np.array(1/252)
 ) -> NDArray[np.float64]:
 
     Psi = KimYiRiskEngine(
@@ -127,7 +127,7 @@ def _dist_loglike_idiosyncratic(y, mui, kappai, gammai, betai, rhoix, alpha, sig
 def pmle_kimyirisk_systematic(
         sys_returns: NDArray[np.float64],
         delta_t: NDArray[np.float64],
-        seed_number: np.uint64 = np.uint64(20250101),
+        seed_number: np.uint64 = np.uint64(20240114),
         n_mc_paths: int = 10_000,
         nuts_sampler: Literal["pymc", "nutpie", "jax", "numpyro", "blackjax"] = "nutpie",
         is_progress_bar: bool = False
@@ -209,7 +209,7 @@ def pmle_kimyirisk_idiosyncratic(
         idi_returns: NDArray[np.float64],
         params_sys: dict,
         delta_t: NDArray[np.float64],
-        seed_number: np.uint64 = 20250101,
+        seed_number: np.uint64 = np.uint64(20240114),
         n_mc_paths: int = 10_000,
         nuts_sampler: Literal["pymc", "nutpie", "jax", "numpyro", "blackjax"] = "nutpie",
         is_progress_bar: bool = False
@@ -351,7 +351,7 @@ class KimYiRiskEngine:
     def random(self, rng: RandomBase=None, size: Tuple[int, int, int]=None) -> Tuple:
 
         if rng is None:
-            rng = RandomMT19937(np.int64(20250101))
+            rng = RandomMT19937(np.int64(20240114))
 
         if size is None:
             n_assets, n_sims, n_steps = 1, 1, 1

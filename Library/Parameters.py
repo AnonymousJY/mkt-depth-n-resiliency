@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from Library.ImportLibs import *
+import copy
+import numpy as np
+
+from numpy.typing import NDArray
+from abc import ABC, abstractmethod
 
 
 class ParametersBase(ABC):

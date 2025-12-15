@@ -89,8 +89,7 @@ class StatisticsMCVariance(StatisticsMCBase):
 
 class StatisticsMCConfidenceInterval(StatisticsMCBase):
 
-    def __init__(self, confidence_level: np.float64 = 0.975):
-        self.inner_mean = StatisticsMCMean()
+    def __init__(self, confidence_level: NDArray[np.float64] = 0.975):
         self.inner_var = StatisticsMCVariance()
         self.n_paths = np.int64(0)
         self.confidence_level = confidence_level
@@ -135,7 +134,7 @@ class StatisticsMCQuantile(StatisticsMCBase):
         self.running_sum = result
 
     def get_result_so_far(self) -> NDArray[np.float64]:
-        return np.quantile(self.running_sum, q=self.alpha) * -1.
+        return np.quantile(self.running_sum, q=self.alpha)
 
     def __deepcopy__(self, memodict={}) -> StatisticsMCBase:
         cls = self.__class__
