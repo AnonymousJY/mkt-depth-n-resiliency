@@ -66,7 +66,7 @@ if __name__=='__main__':
     beg_time = time.perf_counter()
 
     valuation_beg_dt = '20250331'
-    valuation_end_dt = '20250416'
+    valuation_end_dt = '20250417'
     date_format = '%Y%m%d'
     valuation_window = pd.bdate_range(pd.to_datetime(arg=valuation_beg_dt, format=date_format),
                                       pd.to_datetime(arg=valuation_end_dt, format=date_format))
