@@ -29,130 +29,131 @@ def get_idiosyncratic_ids() -> List[str]:
     return names
 
 
-if __name__=="__main__":
-    import psycopg2
+# ----------------------------------------------------------------------------
+# Asian Collar portfolio specification
+#
+# The worked example in the paper: a discrete-Asian collar (short put / long
+# call) hedged with vanilla options (long put / short call). These constants
+# define that structure; build_portfolio() materialises it for a given
+# valuation date so notebooks and scripts can obtain the portfolio without a
+# database round-trip.
+# ----------------------------------------------------------------------------
+EXPIRY_DATE = '20250417'
+BASE_DAYS = 252
+FIXING_FREQUENCY = 'B'
+FIXING_DATE_BEG = '20250331'
+FIXING_DATE_END = '20250417'
+
+COLLAR_STRIKE_PUT = 172.23
+COLLAR_STRIKE_CALL = 198.06
+VANILLA_STRIKE_PUT = 180.84
+VANILLA_STRIKE_CALL = 206.67
+
+COLLAR_POSITION_PUT = -100.
+COLLAR_POSITION_CALL = 100.
+VANILLA_POSITION_PUT = 85.
+VANILLA_POSITION_CALL = -120.
+
+
+def build_portfolio(valuation_date: str, idiosyncratic_id: str) -> List[Portfolio]:
+    """Return the four Portfolio legs for one (valuation date, underlying).
+
+    Parameters
+    ----------
+    valuation_date : str
+        Valuation date in ``YYYYMMDD`` format.
+    idiosyncratic_id : str
+        Underlying ticker, e.g. ``"COIN"``.
+
+    Returns
+    -------
+    list[Portfolio]
+        The discrete-Asian collar put/call legs followed by the two vanilla
+        hedge legs.
+    """
+    collar_put = Portfolio(
+        sVALUATION_DATE=valuation_date,
+        sIDIOSYNCRATIC_ID=idiosyncratic_id,
+        sTYPOLOGY='collar',
+        sSTRATEGY='asian discrete',
+        sPAYOFF_TYPE='put',
+        sEXPIRY_DATE=EXPIRY_DATE,
+        dSTRIKE_PRICE=COLLAR_STRIKE_PUT,
+        dPOSITION=COLLAR_POSITION_PUT,
+        sFIXING_FREQUENCY=FIXING_FREQUENCY,
+        sFIXING_DATE_BEG=FIXING_DATE_BEG,
+        sFIXING_DATE_END=FIXING_DATE_END,
+        dBASE_DAYS=BASE_DAYS
+    )
+    collar_call = Portfolio(
+        sVALUATION_DATE=valuation_date,
+        sIDIOSYNCRATIC_ID=idiosyncratic_id,
+        sTYPOLOGY='collar',
+        sSTRATEGY='asian discrete',
+        sPAYOFF_TYPE='call',
+        sEXPIRY_DATE=EXPIRY_DATE,
+        dSTRIKE_PRICE=COLLAR_STRIKE_CALL,
+        dPOSITION=COLLAR_POSITION_CALL,
+        sFIXING_FREQUENCY=FIXING_FREQUENCY,
+        sFIXING_DATE_BEG=FIXING_DATE_BEG,
+        sFIXING_DATE_END=FIXING_DATE_END,
+        dBASE_DAYS=BASE_DAYS
+    )
+    vanilla_put = Portfolio(
+        sVALUATION_DATE=valuation_date,
+        sIDIOSYNCRATIC_ID=idiosyncratic_id,
+        sTYPOLOGY='vanilla',
+        sSTRATEGY='vanilla',
+        sPAYOFF_TYPE='put',
+        sEXPIRY_DATE=EXPIRY_DATE,
+        dSTRIKE_PRICE=VANILLA_STRIKE_PUT,
+        dPOSITION=VANILLA_POSITION_PUT,
+        sFIXING_FREQUENCY=None,
+        sFIXING_DATE_BEG=None,
+        sFIXING_DATE_END=None,
+        dBASE_DAYS=BASE_DAYS
+    )
+    vanilla_call = Portfolio(
+        sVALUATION_DATE=valuation_date,
+        sIDIOSYNCRATIC_ID=idiosyncratic_id,
+        sTYPOLOGY='vanilla',
+        sSTRATEGY='vanilla',
+        sPAYOFF_TYPE='call',
+        sEXPIRY_DATE=EXPIRY_DATE,
+        dSTRIKE_PRICE=VANILLA_STRIKE_CALL,
+        dPOSITION=VANILLA_POSITION_CALL,
+        sFIXING_FREQUENCY=None,
+        sFIXING_DATE_BEG=None,
+        sFIXING_DATE_END=None,
+        dBASE_DAYS=BASE_DAYS
+    )
+    return [collar_put, collar_call, vanilla_put, vanilla_call]
+
+
+if __name__ == "__main__":
+    # Materialise the portfolio for the paper's valuation window and write it
+    # to a committed CSV snapshot. There is no database dependency: notebooks
+    # and scripts can either read data/snapshots/portfolio.csv or call
+    # build_portfolio() directly.
     import pandas as pd
+
+    from Library.DataAccess import write_snapshot
 
     valuation_beg_dt = '20250331'
     valuation_end_dt = '20250416'
-    expiry_date = '20250417'
-
-    collar_strike_put  = 172.23
-    collar_strike_call = 198.06
-    vanilla_strike_put  = 180.84
-    vanilla_strike_call = 206.67
-
-    collar_position_put  = -100.
-    collar_position_call = 100.
-    vanilla_position_put  = 85.
-    vanilla_position_call = -120.
-
     dt_format = '%Y%m%d'
-    base_days = 252
-    fixing_frequency = 'B'
-    fixing_date_beg = '20250331'
-    fixing_date_end = '20250417'
 
     valuation_date_window = pd.bdate_range(
         start=pd.to_datetime(arg=valuation_beg_dt, format=dt_format),
         end=pd.to_datetime(arg=valuation_end_dt, format=dt_format)
     )
 
-    # print(valuation_date_window)
+    portfolio_rows = []
+    for val_dt in valuation_date_window:
+        val_dt = val_dt.strftime(dt_format)
+        for idiosyncratic_id in get_idiosyncratic_ids():
+            portfolio_rows.extend(build_portfolio(val_dt, idiosyncratic_id))
 
-    conn = None
-
-    try:
-        conn = psycopg2.connect(
-            dbname="postgres",
-            user="postgres",
-            password="postgres",
-            host="localhost",
-            port="5432"
-        )
-        cur = conn.cursor()
-        print("Database connected successfully")
-
-        portfolio_to_insert = []
-
-        for val_dt in valuation_date_window:
-            for idiosyncratic_id in get_idiosyncratic_ids():
-                val_dt = val_dt.strftime(dt_format)
-                portfolio1 = Portfolio(
-                    sVALUATION_DATE=val_dt,
-                    sIDIOSYNCRATIC_ID=idiosyncratic_id,
-                    sTYPOLOGY='collar',
-                    sSTRATEGY='asian discrete',
-                    sPAYOFF_TYPE='put',
-                    sEXPIRY_DATE=expiry_date,
-                    dSTRIKE_PRICE=collar_strike_put,
-                    dPOSITION=collar_position_put,
-                    sFIXING_FREQUENCY=fixing_frequency,
-                    sFIXING_DATE_BEG=fixing_date_beg,
-                    sFIXING_DATE_END=fixing_date_end,
-                    dBASE_DAYS=base_days
-                )
-                portfolio2 = Portfolio(
-                    sVALUATION_DATE=val_dt,
-                    sIDIOSYNCRATIC_ID=idiosyncratic_id,
-                    sTYPOLOGY='collar',
-                    sSTRATEGY='asian discrete',
-                    sPAYOFF_TYPE='call',
-                    sEXPIRY_DATE=expiry_date,
-                    dSTRIKE_PRICE=collar_strike_call,
-                    dPOSITION=collar_position_call,
-                    sFIXING_FREQUENCY=fixing_frequency,
-                    sFIXING_DATE_BEG=fixing_date_beg,
-                    sFIXING_DATE_END=fixing_date_end,
-                    dBASE_DAYS=base_days
-                )
-                portfolio3 = Portfolio(
-                    sVALUATION_DATE=val_dt,
-                    sIDIOSYNCRATIC_ID=idiosyncratic_id,
-                    sTYPOLOGY='vanilla',
-                    sSTRATEGY='vanilla',
-                    sPAYOFF_TYPE='put',
-                    sEXPIRY_DATE=expiry_date,
-                    dSTRIKE_PRICE=vanilla_strike_put,
-                    dPOSITION=vanilla_position_put,
-                    sFIXING_FREQUENCY=None,
-                    sFIXING_DATE_BEG=None,
-                    sFIXING_DATE_END=None,
-                    dBASE_DAYS=base_days
-                )
-                portfolio4 = Portfolio(
-                    sVALUATION_DATE=val_dt,
-                    sIDIOSYNCRATIC_ID=idiosyncratic_id,
-                    sTYPOLOGY='vanilla',
-                    sSTRATEGY='vanilla',
-                    sPAYOFF_TYPE='call',
-                    sEXPIRY_DATE=expiry_date,
-                    dSTRIKE_PRICE=vanilla_strike_call,
-                    dPOSITION=vanilla_position_call,
-                    sFIXING_FREQUENCY=None,
-                    sFIXING_DATE_BEG=None,
-                    sFIXING_DATE_END=None,
-                    dBASE_DAYS=base_days
-                )
-                portfolio_to_insert.append(portfolio1)
-                portfolio_to_insert.append(portfolio2)
-                portfolio_to_insert.append(portfolio3)
-                portfolio_to_insert.append(portfolio4)
-
-        insert_query = ("INSERT INTO portfolio ("
-                        "sVALUATION_DATE, sIDIOSYNCRATIC_ID, sTYPOLOGY, sSTRATEGY, sPAYOFF_TYPE, "
-                        "sEXPIRY_DATE, dSTRIKE_PRICE, dPOSITION, sFIXING_FREQUENCY, sFIXING_DATE_BEG, "
-                        "sFIXING_DATE_END, dBASE_DAYS"
-                        ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
-
-        cur.executemany(insert_query, portfolio_to_insert)
-
-        conn.commit()
-
-        print(f"{cur.rowcount} rows inserted successfully.")
-
-    except psycopg2.OperationalError as e:
-        print(f"Database not connected successfully: {e}")
-
-    finally:
-        conn.close()
+    portfolio_df = pd.DataFrame(portfolio_rows, columns=Portfolio._fields)
+    path = write_snapshot(portfolio_df, "portfolio.csv", index=False)
+    print(f"{len(portfolio_df)} portfolio rows written to {path}")

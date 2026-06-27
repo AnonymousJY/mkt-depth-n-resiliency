@@ -1,75 +1,148 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+run_pmle_kimyi2025.py — P-MLE calibration driver (database-free).
+
+Estimates the liquidity-adjusted jump-diffusion model parameters for each
+valuation date in the configured window, in two stages:
+
+  1. Systematic stage  — calibrate the common parameters from the systematic
+     proxy (^SPX).
+  2. Idiosyncratic stage — calibrate the asset-specific parameters for each
+     idiosyncratic asset (COIN), conditional on the systematic parameters.
+
+Results are written as wide-format CSVs to ``Study/Estimated Parameters PMLE/``
+via ``Library.DataAccess.save_pmle_params``. Dates that already have a CSV are
+skipped, so the script is incremental. This replaces the original PostgreSQL
+round-trip: there is no database dependency.
+
+Price history is read through the data-access layer (committed snapshots by
+default; live FinanceDataReader when ``MKTDEPTH_DATA_MODE=live``).
+
+Run from the repository root:
+
+    python Scripts/run_pmle_kimyi2025.py
+"""
 
 import time
-import psycopg2
 import numpy as np
 import pandas as pd
-import FinanceDataReader as fdr
 import multiprocessing
 multiprocessing.set_start_method("fork", force=True)
 
 from concurrent.futures import ProcessPoolExecutor
 from typing import List
-from itertools import product
+
 from Scripts.load_portfolio import get_idiosyncratic_ids
-from Library.RiskEngineKimYi2025 import pmle_kimyirisk_systematic, pmle_kimyirisk_idiosyncratic
+from Library.DataAccess import (
+    get_price_panel,
+    get_pmle_params,
+    get_pmle_params_dict,
+    pmle_params_exists,
+    save_pmle_params,
+)
+from Library.RiskEngineKimYi2025 import (
+    pmle_kimyirisk_systematic,
+    pmle_kimyirisk_idiosyncratic,
+)
+
+# The six common parameters carried from the systematic stage into the
+# idiosyncratic stage.
+SYSTEMATIC_PARAMS = ["dALPHA", "dSIGMA", "dPPROB", "dLAMB", "dETA1", "dETA2"]
 
 
-def pmle_kimyirisk_systematic_helper(args) -> List[tuple]:
+# ----------------------------------------------------------------------------
+# Worker helpers (run inside ProcessPoolExecutor)
+# ----------------------------------------------------------------------------
+def pmle_kimyirisk_systematic_helper(args) -> tuple:
+    """Estimate the systematic parameters for one valuation date.
 
-    valuation_dt, return_vector, delta_t, seed_number, n_mc_paths, systematic_id, idiosyncratic_id = args
-
+    Returns ``(valuation_dt, systematic_id, results)`` where ``results`` is the
+    ``{param: ParamsResults}`` dict produced by ``pmle_kimyirisk_systematic``.
+    """
+    valuation_dt, return_vector, delta_t, seed_number, n_mc_paths, systematic_id = args
     results = pmle_kimyirisk_systematic(
         sys_returns=return_vector,
         delta_t=delta_t,
         seed_number=seed_number,
-        n_mc_paths=n_mc_paths
+        n_mc_paths=n_mc_paths,
     )
-
-    results_list = []
-    for k, v in results.items():
-        stats_name1, stats_name2, stats_name3 = v._asdict().keys()
-        stats1, stats2, stats3 = v._asdict().values()
-        results_list.append((valuation_dt, idiosyncratic_id, systematic_id, k, stats_name1, float(stats1)))
-        results_list.append((valuation_dt, idiosyncratic_id, systematic_id, k, stats_name2, float(stats2)))
-        results_list.append((valuation_dt, idiosyncratic_id, systematic_id, k, stats_name3, float(stats3)))
-
-    return results_list
+    return valuation_dt, systematic_id, results
 
 
-def pmle_kimyirisk_idiosyncratic_helper(args) -> List[tuple]:
+def pmle_kimyirisk_idiosyncratic_helper(args) -> tuple:
+    """Estimate the idiosyncratic parameters for one (valuation date, asset),
+    conditional on the systematic parameters.
 
-    valuation_dt, params_sys, return_vector, delta_t, seed_number, n_mc_paths, systematic_id, idiosyncratic_id = args
-
+    Returns ``(valuation_dt, idiosyncratic_id, results)``.
+    """
+    valuation_dt, params_sys, return_vector, delta_t, seed_number, n_mc_paths, idiosyncratic_id = args
     results = pmle_kimyirisk_idiosyncratic(
         params_sys=params_sys,
         idi_returns=return_vector,
         delta_t=delta_t,
         seed_number=seed_number,
-        n_mc_paths=n_mc_paths
+        n_mc_paths=n_mc_paths,
     )
-
-    results_list = []
-    for k, v in results.items():
-        stats_name1, stats_name2, stats_name3 = v._asdict().keys()
-        stats1, stats2, stats3 = v._asdict().values()
-        results_list.append((valuation_dt, idiosyncratic_id, systematic_id, k, stats_name1, float(stats1)))
-        results_list.append((valuation_dt, idiosyncratic_id, systematic_id, k, stats_name2, float(stats2)))
-        results_list.append((valuation_dt, idiosyncratic_id, systematic_id, k, stats_name3, float(stats3)))
-
-    return results_list
+    return valuation_dt, idiosyncratic_id, results
 
 
-if __name__=='__main__':
+# ----------------------------------------------------------------------------
+# Result assembly: MCMC output -> full eleven-parameter CSV row
+# ----------------------------------------------------------------------------
+def _triples_from_results(results: dict) -> dict:
+    """Convert a ``{param: ParamsResults}`` dict into a
+    ``{param: (mean, ci_lower, ci_upper)}`` dict."""
+    return {k: (v.dMEAN, v.dCI_LOWER, v.dCI_UPPER) for k, v in results.items()}
+
+
+def assemble_systematic_params(results: dict) -> dict:
+    """Build the full eleven-parameter dict for a systematic underlying.
+
+    The systematic proxy has, by definition, ``mu_i = kappa_i = rho_iX = 0`` and
+    ``gamma_i = beta_i = 1`` (with degenerate confidence intervals); the
+    remaining six parameters come from the systematic MCMC fit.
+    """
+    params = {
+        "dMUI": (0.0, 0.0, 0.0),
+        "dKAPPAI": (0.0, 0.0, 0.0),
+        "dGAMMAI": (1.0, 1.0, 1.0),
+        "dBETAI": (1.0, 1.0, 1.0),
+        "dRHOIX": (0.0, 0.0, 0.0),
+    }
+    params.update(_triples_from_results(results))
+    return params
+
+
+def assemble_idiosyncratic_params(results: dict, systematic_series: pd.Series) -> dict:
+    """Build the full eleven-parameter dict for an idiosyncratic asset.
+
+    The five asset-specific parameters come from the idiosyncratic MCMC fit;
+    the six common parameters are inherited from the systematic estimate
+    (mean and confidence bounds) read back from its CSV.
+    """
+    params = _triples_from_results(results)
+    for k in SYSTEMATIC_PARAMS:
+        params[k] = (
+            systematic_series[k],
+            systematic_series[f"{k}_CI_LOWER"],
+            systematic_series[f"{k}_CI_UPPER"],
+        )
+    return params
+
+
+if __name__ == "__main__":
 
     beg_time = time.perf_counter()
 
-    valuation_beg_dt = '20250331'
-    valuation_end_dt = '20250417'
-    date_format = '%Y%m%d'
-    valuation_window = pd.bdate_range(pd.to_datetime(arg=valuation_beg_dt, format=date_format),
-                                      pd.to_datetime(arg=valuation_end_dt, format=date_format))
+    # --- configuration -------------------------------------------------------
+    valuation_beg_dt = "20250331"
+    valuation_end_dt = "20250417"
+    date_format = "%Y%m%d"
+    valuation_window = pd.bdate_range(
+        pd.to_datetime(arg=valuation_beg_dt, format=date_format),
+        pd.to_datetime(arg=valuation_end_dt, format=date_format),
+    )
     valuation_window_str = [dt.strftime(date_format) for dt in valuation_window]
 
     lookback_period = 252
@@ -78,191 +151,76 @@ if __name__=='__main__':
     seed_number = np.uint64(20240114)
     n_mc_paths = int(10_000)
 
-    systematic_id = '^SPX'
-    id_dict = {'systematic_id': systematic_id, 'idiosyncratic_ids': get_idiosyncratic_ids()}
+    systematic_id = "^SPX"
+    idiosyncratic_ids = get_idiosyncratic_ids()
 
-    systematic_price_ts = fdr.DataReader(id_dict['systematic_id'])['Adj Close']
-    systematic_price_ts.name = id_dict['systematic_id']
-    systematic_price_ts.index.name = 'sVALUATION_DATE'
-
-    price_ts = []
-    for symbol in id_dict['idiosyncratic_ids']:
-        tmp_df = fdr.DataReader(symbol)['Adj Close']
-        tmp_df.name = symbol
-        tmp_df.index.name = 'sVALUATION_DATE'
-        price_ts.append(tmp_df)
-
-    price_ts = pd.concat(price_ts, axis=1)
-    price_ts = pd.concat([systematic_price_ts, price_ts], axis=1).ffill().bfill()
-    price_ts.index = pd.to_datetime(price_ts.index)
+    # --- price history (snapshot by default; see Library/DataAccess.py) ------
+    price_ts = get_price_panel([systematic_id] + idiosyncratic_ids)
     return_ts = price_ts.pct_change().dropna()
 
-    conn = None
-    sys_df = None
-    idi_df = None
-    set_to_valuate_final_systematic = []
-    set_to_valuate_final_idiosyncratic = []
+    # --- incremental work set: skip dates that already have a CSV ------------
+    set_to_valuate_systematic = [
+        dt for dt in valuation_window_str
+        if not pmle_params_exists(dt, systematic_id)
+    ]
+    set_to_valuate_idiosyncratic = [
+        (dt, idi_id)
+        for dt in valuation_window_str
+        for idi_id in idiosyncratic_ids
+        if not pmle_params_exists(dt, idi_id)
+    ]
+    print(f"Systematic dates to estimate:   {len(set_to_valuate_systematic)}")
+    print(f"Idiosyncratic (date, id) pairs: {len(set_to_valuate_idiosyncratic)}")
 
-    try:
-        conn = psycopg2.connect(
-            dbname="postgres",
-            user="postgres",
-            password="postgres",
-            host="localhost",
-            port="5432"
-        )
-        cur = conn.cursor()
-        print("Database connected successfully")
-
-        sql_str = f"SELECT * FROM pmle_params_kim_yi WHERE sSYSTEMATIC_ID='{systematic_id}' AND sSYSTEMATIC_ID=sIDIOSYNCRATIC_ID;"
-
-        sys_df = pd.read_sql(sql_str, conn)
-        sys_df = sys_df.set_index(['svaluation_date', 'sidiosyncratic_id', 'ssystematic_id'])
-
-        array_of_idi_ids = None
-
-        if len(id_dict['idiosyncratic_ids']) > 1:
-            array_of_idi_ids = tuple(id_dict['idiosyncratic_ids'])
-            sql_str = f"SELECT * FROM pmle_params_kim_yi WHERE sIDIOSYNCRATIC_ID IN '{array_of_idi_ids}';"
-        else:
-            array_of_idi_ids = id_dict['idiosyncratic_ids'][0]
-            sql_str = f"SELECT * FROM pmle_params_kim_yi WHERE sIDIOSYNCRATIC_ID = '{array_of_idi_ids}';"
-
-        idi_df = pd.read_sql(sql_str, conn)
-        idi_df = idi_df.set_index(['svaluation_date', 'sidiosyncratic_id', 'ssystematic_id'])
-
-        print("Successfully fetched data")
-
-        set_to_valuate_total_systematic = list(
-            product(valuation_window_str, [id_dict['systematic_id']], [id_dict['systematic_id']]))
-        for tuple_to_valuate in set_to_valuate_total_systematic:
-            if not tuple_to_valuate in sys_df.index:
-                set_to_valuate_final_systematic.append(tuple_to_valuate)
-
-        set_to_valuate_total_idiosyncratic = list(
-            product(valuation_window_str, id_dict['idiosyncratic_ids'], [id_dict['systematic_id']]))
-        for tuple_to_valuate in set_to_valuate_total_idiosyncratic:
-            if not tuple_to_valuate in idi_df.index:
-                set_to_valuate_final_idiosyncratic.append(tuple_to_valuate)
-
-    except psycopg2.OperationalError as e:
-        print(f"Database not connected successfully: {e}")
-
-    finally:
-        conn.close()
-        print("Database connection closed")
-
-    # P-MLE Systematic
-    if len(set_to_valuate_final_systematic) > 0:
+    # --- P-MLE systematic stage ---------------------------------------------
+    if set_to_valuate_systematic:
         systematic_arg_list = []
-        for dt, idi_id, sys_id in set_to_valuate_final_systematic:
-            return_vector = return_ts.loc[return_ts.index <= dt, idi_id].iloc[-lookback_period:].to_numpy()
-            systematic_arg_list.append((dt, return_vector, delta_t, seed_number, n_mc_paths, sys_id, idi_id))
-
-        insert_query = ("INSERT INTO pmle_params_kim_yi ("
-                        "sVALUATION_DATE, sIDIOSYNCRATIC_ID, sSYSTEMATIC_ID, sPARAMETER, sVALUE_STATISTICS_DESC, sVALUE_STATISTICS"
-                        ") VALUES (%s, %s, %s, %s, %s, %s)")
+        for dt in set_to_valuate_systematic:
+            return_vector = (
+                return_ts.loc[return_ts.index <= dt, systematic_id]
+                .iloc[-lookback_period:]
+                .to_numpy()
+            )
+            systematic_arg_list.append(
+                (dt, return_vector, delta_t, seed_number, n_mc_paths, systematic_id)
+            )
 
         with ProcessPoolExecutor() as executor:
-
-            results = executor.map(pmle_kimyirisk_systematic_helper, systematic_arg_list)
-
-            try:
-                conn = psycopg2.connect(
-                    dbname="postgres",
-                    user="postgres",
-                    password="postgres",
-                    host="localhost",
-                    port="5432"
+            for valuation_dt, sys_id, results in executor.map(
+                pmle_kimyirisk_systematic_helper, systematic_arg_list
+            ):
+                path = save_pmle_params(
+                    valuation_dt, sys_id, assemble_systematic_params(results)
                 )
-                cur = conn.cursor()
-                print("Database connected successfully")
+                print(f"  systematic  {valuation_dt} {sys_id}  -> {path}")
 
-                for result in results:
-                    cur.executemany(insert_query, result)
-                    num_rows_committed = cur.rowcount
-                    print(f"Number of rows affected by the operation: {num_rows_committed}")
-                    conn.commit()
-                    print("Transaction committed successfully.")
-
-            except psycopg2.OperationalError as e:
-                print(f"Database not connected successfully: {e}")
-
-            finally:
-                conn.close()
-                print("Database connection closed")
-
-    try:
-        conn = psycopg2.connect(
-            dbname="postgres",
-            user="postgres",
-            password="postgres",
-            host="localhost",
-            port="5432"
-        )
-        cur = conn.cursor()
-        print("Database connected successfully")
-
-        sql_str = f"SELECT * FROM pmle_params_kim_yi WHERE sSYSTEMATIC_ID='{systematic_id}' AND sSYSTEMATIC_ID=sIDIOSYNCRATIC_ID;"
-
-        sys_df = pd.read_sql(sql_str, conn)
-        sys_df = sys_df.set_index(['svaluation_date', 'sidiosyncratic_id', 'ssystematic_id'])
-
-        print("Successfully fetched data")
-
-    except psycopg2.OperationalError as e:
-        print(f"Database not connected successfully: {e}")
-
-    finally:
-        conn.close()
-        print("Database connection closed")
-
-    # P-MLE Idiosyncratic
-    idiosyncratic_arg_list = []
-    for dt, idi_id, sys_id in set_to_valuate_final_idiosyncratic:
-        mask = (sys_df.index.get_level_values('svaluation_date') == dt)
-        mask &= (sys_df.index.get_level_values('ssystematic_id') == sys_id)
-        mask &= (sys_df.svalue_statistics_desc == 'dMEAN')
-        sparameter, svalue = sys_df.loc[mask, ['sparameter', 'svalue_statistics']].to_numpy().T
-        params_sys = {k: v for k, v in zip(sparameter, svalue)}
-        return_vector = return_ts.loc[return_ts.index <= dt, idi_id].iloc[-lookback_period:].to_numpy()
-        idiosyncratic_arg_list.append(
-            (dt, params_sys, return_vector, delta_t, seed_number, n_mc_paths, sys_id, idi_id))
-
-    insert_query = ("INSERT INTO pmle_params_kim_yi ("
-                    "sVALUATION_DATE, sIDIOSYNCRATIC_ID, sSYSTEMATIC_ID, sPARAMETER, sVALUE_STATISTICS_DESC, sVALUE_STATISTICS"
-                    ") VALUES (%s, %s, %s, %s, %s, %s)")
-
-    with ProcessPoolExecutor() as executor:
-
-        results = executor.map(pmle_kimyirisk_idiosyncratic_helper, idiosyncratic_arg_list)
-
-        try:
-            conn = psycopg2.connect(
-                dbname="postgres",
-                user="postgres",
-                password="postgres",
-                host="localhost",
-                port="5432"
+    # --- P-MLE idiosyncratic stage ------------------------------------------
+    # Built after the systematic stage so every required systematic CSV exists
+    # (whether just estimated above or already cached from a previous run).
+    if set_to_valuate_idiosyncratic:
+        idiosyncratic_arg_list = []
+        for dt, idi_id in set_to_valuate_idiosyncratic:
+            params_sys = get_pmle_params_dict(dt, systematic_id, params=SYSTEMATIC_PARAMS)
+            return_vector = (
+                return_ts.loc[return_ts.index <= dt, idi_id]
+                .iloc[-lookback_period:]
+                .to_numpy()
             )
-            cur = conn.cursor()
-            print("Database connected successfully")
+            idiosyncratic_arg_list.append(
+                (dt, params_sys, return_vector, delta_t, seed_number, n_mc_paths, idi_id)
+            )
 
-            for result in results:
-                cur.executemany(insert_query, result)
-                num_rows_committed = cur.rowcount
-                print(f"Number of rows affected by the operation: {num_rows_committed}")
-                conn.commit()
-                print("Transaction committed successfully.")
+        with ProcessPoolExecutor() as executor:
+            for valuation_dt, idi_id, results in executor.map(
+                pmle_kimyirisk_idiosyncratic_helper, idiosyncratic_arg_list
+            ):
+                systematic_series = get_pmle_params(valuation_dt, systematic_id)
+                path = save_pmle_params(
+                    valuation_dt,
+                    idi_id,
+                    assemble_idiosyncratic_params(results, systematic_series),
+                )
+                print(f"  idiosyncratic {valuation_dt} {idi_id}  -> {path}")
 
-        except psycopg2.OperationalError as e:
-            print(f"Database not connected successfully: {e}")
-
-        finally:
-            conn.close()
-            print("Database connection closed")
-
-    end_time = time.perf_counter()
-
-    elasped_time = end_time - beg_time
-    print(f"Time taken: {elasped_time:.6f} seconds")
+    elapsed_time = time.perf_counter() - beg_time
+    print(f"Time taken: {elapsed_time:.6f} seconds")

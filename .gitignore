@@ -1,0 +1,40 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ---- virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- IDE / editor ----
+.idea/
+.vscode/
+*.swp
+*~
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- project: large or regenerable artifacts ----
+# Snapshots are regenerable via Scripts/export_snapshots.py.
+# Comment the next line out if you want to commit the snapshot set
+# as part of the replication package (recommended for archival).
+# data/snapshots/
+
+# scratch / exploratory notebooks (keep out of the replication package)
+scratch_pad.ipynb
+Scripts/test.ipynb
