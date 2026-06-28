@@ -50,7 +50,7 @@ dependencies:
   # --- pip-only packages (not available on conda-forge) ---
   - pip
   - pip:
-      - FinanceDataReader>=0.9.50   # live SPX / COIN price series
+      - finance-datareader   # live SPX / COIN price series
       - databento>=0.34            # options data (Study notebooks)
-      - ustreasurycurve>=0.1       # US Treasury curve (discounting)
+      - ustreasurycurve       # US Treasury curve (discounting)
       - nelson-siegel-svensson>=0.5  # NSS curve fit (skew calibration)
