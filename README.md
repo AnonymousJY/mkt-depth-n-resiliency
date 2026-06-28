@@ -1,5 +1,6 @@
 # mkt-depth-n-resiliency
 
+<<<<<<< HEAD
 Code accompanying the research paper
 **"Systematic Liquidity Risk Management: A Novel Perspective on Derivatives"**
 (Yi & Kim), SSRN: https://dx.doi.org/10.2139/ssrn.5454874
@@ -168,3 +169,6 @@ figures match the committed PDFs. Once both notebooks are migrated, the
 ## License
 
 MIT — see `LICENSE`.
+=======
+The codes were used to generate the numerical outputs in the research paper *Systematic Liquidity Risk Management: A Novel Perspective on Derivatives*, which can be found in https://dx.doi.org/10.2139/ssrn.5454874. The codes and the outputs generated from the codes are for illustration purpose only. 
+>>>>>>> a9969579c7a3d6ca98da5dbb8fbbff1ce478ffd4
