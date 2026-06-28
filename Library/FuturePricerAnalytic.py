@@ -96,6 +96,34 @@ def future_price_delta(risk_free_rate, dividend_yield, borrow_rate, time_to_expi
     return np.exp((r - q - b) * T)
 
 
+
+def futures_convexity_logadj(equity_vol, rate_vol, correlation, time_to_expiry, mean_reversion=0.0):
+    """Log futures/forward convexity adjustment under a Gaussian (Hull-White) short-rate model
+    with constant equity vol. For lognormal spot and Gaussian rates,
+        Fut0 = Fwd0 * exp(c),   c = Cov(ln S_T, integral_0^T r_s ds),
+    and with Hull-White mean reversion a and instantaneous correlation rho between equity and
+    the short rate,
+        c = rho * sigma_S * sigma_r * (1/a) * (T - (1 - e^{-aT}) / a).
+    As a -> 0 (Ho-Lee / Gaussian random-walk rates) this collapses to the textbook
+        c -> rho * sigma_S * sigma_r * T^2 / 2,
+    showing the adjustment grows ~ T^2. Sign follows rho: positive equity-rate correlation
+    makes the future richer than the forward."""
+    sS = _col(equity_vol); sr = _col(rate_vol); rho = _col(correlation)
+    T = _col(time_to_expiry); a = _col(mean_reversion)
+    small = np.abs(a) < 1e-10
+    a_safe = np.where(small, 1.0, a)
+    B = (1.0 - np.exp(-a_safe * T)) / a_safe
+    term = np.where(small, 0.5 * T ** 2, (T - B) / a_safe)
+    return rho * sS * sr * term
+
+
+def futures_price_from_forward(forward_price, equity_vol, rate_vol, correlation,
+                               time_to_expiry, mean_reversion=0.0):
+    """Convexity-adjusted futures price  Fut0 = Fwd0 * exp(c)  (see futures_convexity_logadj)."""
+    c = futures_convexity_logadj(equity_vol, rate_vol, correlation, time_to_expiry, mean_reversion)
+    return _col(forward_price) * np.exp(c)
+
+
 if __name__ == "__main__":
     S0, r, q, b, T, K = 5500., 0.043, 0.013, 0.0025, 0.25, 5400.
     F = future_fair_price(np.array(S0), np.array(r), np.array(q), np.array(b), np.array(T))
