@@ -227,7 +227,23 @@ FLAT_RATE = 0.05
 # ---------------------------------------------------------------------------
 # Kim-Yi (2025) systematic calibration: sigma, pprob, lamb, eta1, eta2
 # ---------------------------------------------------------------------------
-INITIAL_VALUES_SYSTEMATIC = np.array([0.2, 0.2, 5.0, 22.0, 7.0])
+# Multi-start baselines representing different market regimes. calibrate_
+# date_systematic() runs SLSQP from each in turn and keeps the best result.
+# Necessary because SLSQP is a local solver, and a single fixed initial
+# guess drops into the Newton IV-inversion's numerical-failure region for
+# some (date, tenor) combinations -- returning the 1e6 penalty and getting
+# stuck. Multi-start gives SLSQP multiple entry points so at least one
+# lands in a well-behaved basin.
+INITIAL_VALUES_SYSTEMATIC_MULTISTART = [
+    np.array([0.15, 0.05,  1.0, 30.0, 10.0]),  # low vol / few jumps  (2013-17)
+    np.array([0.20, 0.20,  5.0, 22.0,  7.0]),  # baseline (paper's April 2025 window)
+    np.array([0.35, 0.40, 15.0, 15.0,  5.0]),  # high vol regime      (2008, 2020)
+    np.array([0.25, 0.30, 10.0, 12.0,  3.0]),  # heavy-tail regime
+]
+
+# Back-compat alias -- kept so the migrate script and any other consumer
+# that imports the singular name still works. Points at the baseline.
+INITIAL_VALUES_SYSTEMATIC = INITIAL_VALUES_SYSTEMATIC_MULTISTART[1]
 
 BOUNDS_SYSTEMATIC = {
     "dSIGMA": (1e-4, None),
@@ -247,7 +263,19 @@ BOUNDS_SYSTEMATIC = {
 # (OUTPUT_DIR / OUTPUT_PARQUET_NAME). A (date, tenor) must be calibrated
 # systematically before it can be calibrated idiosyncratically.
 # ---------------------------------------------------------------------------
-INITIAL_VALUES_IDIOSYNCRATIC = np.array([1.0, 2.0, 1.0, 0.5])
+# Multi-start baselines for the idiosyncratic (kappai, gammai, betai,
+# rhoix) fit -- same rationale as INITIAL_VALUES_SYSTEMATIC_MULTISTART.
+# calibrate_date_idiosyncratic() iterates over these and keeps the best
+# converged result.
+INITIAL_VALUES_IDIOSYNCRATIC_MULTISTART = [
+    np.array([1.0, 2.0, 1.0,  0.5]),   # baseline (paper's April 2025 window)
+    np.array([0.3, 1.5, 0.8,  0.0]),   # low idio, uncorrelated
+    np.array([2.0, 3.0, 1.5, -0.3]),   # high idio, negative rho
+    np.array([0.5, 1.2, 0.5,  0.3]),   # low idio, positive rho
+]
+
+# Back-compat alias -- kept for consumers that import the singular name.
+INITIAL_VALUES_IDIOSYNCRATIC = INITIAL_VALUES_IDIOSYNCRATIC_MULTISTART[0]
 
 BOUNDS_IDIOSYNCRATIC = {
     "dKAPPAI": (1e-4, None),

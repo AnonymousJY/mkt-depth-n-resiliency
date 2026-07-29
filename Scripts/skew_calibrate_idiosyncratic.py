@@ -252,7 +252,12 @@ def _make_synthetic_market_vol_data(
 # ---------------------------------------------------------------------------
 def calibrate_date_idiosyncratic(df_date: pd.DataFrame, systematic_params: np.ndarray):
     """Fit the idiosyncratic Kim-Yi (2025) parameters to one date's smile,
-    conditional on that date's systematic parameters."""
+    conditional on that date's systematic parameters.
+
+    Multi-start over cfg.INITIAL_VALUES_IDIOSYNCRATIC_MULTISTART; keep the
+    best (converged, lowest-objective) result. See the systematic version's
+    docstring for the full rationale.
+    """
     weights = df_date["dVEGA"].to_numpy()
     weight_sum = weights.sum()
     if weight_sum <= 0:
@@ -273,14 +278,27 @@ def calibrate_date_idiosyncratic(df_date: pd.DataFrame, systematic_params: np.nd
         option_weights=weights / weight_sum,
     )
 
-    return minimize(
-        fitter.target,
-        x0=cfg.INITIAL_VALUES_IDIOSYNCRATIC,
-        method=cfg.OPTIMIZER_METHOD,
-        bounds=[cfg.BOUNDS_IDIOSYNCRATIC[p] for p in IDIOSYNCRATIC_PARAM_NAMES],
-        tol=cfg.OPTIMIZER_TOL,
-        options={"maxiter": cfg.OPTIMIZER_MAXITER},
-    )
+    bounds = [cfg.BOUNDS_IDIOSYNCRATIC[p] for p in IDIOSYNCRATIC_PARAM_NAMES]
+
+    best_result = None
+    for x0 in cfg.INITIAL_VALUES_IDIOSYNCRATIC_MULTISTART:
+        result = minimize(
+            fitter.target,
+            x0=x0,
+            method=cfg.OPTIMIZER_METHOD,
+            bounds=bounds,
+            tol=cfg.OPTIMIZER_TOL,
+            options={"maxiter": cfg.OPTIMIZER_MAXITER},
+        )
+        if best_result is None:
+            best_result = result
+            continue
+        if result.success and not best_result.success:
+            best_result = result
+        elif result.success == best_result.success and result.fun < best_result.fun:
+            best_result = result
+
+    return best_result
 
 
 # ---------------------------------------------------------------------------

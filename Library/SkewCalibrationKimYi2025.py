@@ -377,6 +377,12 @@ def _kimyi_imp_vol_call(
     except RuntimeError:
         mod_iv_call = np.full(prices.shape, np.nan).reshape((-1, 1))
 
+    # Newton can also silently return inf/NaN (via overflow warnings, not
+    # exceptions) when the outer SLSQP tries a pathological (sigma, pprob,
+    # lamb, eta1, eta2) combination. Treat those the same way as a RuntimeError.
+    if not np.all(np.isfinite(mod_iv_call)):
+        mod_iv_call = np.full(prices.shape, np.nan).reshape((-1, 1))
+
     # mod_iv_call = newton_raphson(
     #     func=bsm_call_obj.price,
     #     func_deriv=bsm_call_obj.vega,
@@ -445,6 +451,10 @@ def _kimyi_imp_vol_put(
             tol=1e-8,
         )
     except RuntimeError:
+        mod_iv_put = np.full(prices.shape, np.nan).reshape((-1, 1))
+
+    # See _kimyi_imp_vol_call above for the rationale on the isfinite check.
+    if not np.all(np.isfinite(mod_iv_put)):
         mod_iv_put = np.full(prices.shape, np.nan).reshape((-1, 1))
 
     # mod_iv_put = newton_raphson(

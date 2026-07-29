@@ -448,7 +448,18 @@ def _make_synthetic_market_vol_data(ticker: str) -> pd.DataFrame:
 # Calibration
 # ---------------------------------------------------------------------------
 def calibrate_date_systematic(df_date: pd.DataFrame):
-    """Fit the systematic Kim-Yi (2025) parameters to one date's smile."""
+    """Fit the systematic Kim-Yi (2025) parameters to one date's smile.
+
+    Runs SLSQP from each starting point in cfg.INITIAL_VALUES_SYSTEMATIC_
+    MULTISTART and returns the best result. Multi-start is necessary
+    because SLSQP is a local solver and any single fixed initial guess
+    can land in the Newton IV-inversion's 1e6-penalty region for some
+    (date, tenor) combinations -- once there, the gradient is
+    numerically zero and SLSQP quits early at x0.
+
+    'Best' = converged AND lowest objective. Falls back to lowest
+    objective overall if none converged.
+    """
     weights = df_date["dVEGA"].to_numpy()
     weight_sum = weights.sum()
     if weight_sum <= 0:
@@ -465,14 +476,31 @@ def calibrate_date_systematic(df_date: pd.DataFrame):
         option_weights=weights / weight_sum,
     )
 
-    return minimize(
-        fitter.target,
-        x0=cfg.INITIAL_VALUES_SYSTEMATIC,
-        method=cfg.OPTIMIZER_METHOD,
-        bounds=[cfg.BOUNDS_SYSTEMATIC[p] for p in SYSTEMATIC_PARAM_NAMES],
-        tol=cfg.OPTIMIZER_TOL,
-        options={"maxiter": cfg.OPTIMIZER_MAXITER},
-    )
+    bounds = [cfg.BOUNDS_SYSTEMATIC[p] for p in SYSTEMATIC_PARAM_NAMES]
+
+    best_result = None
+    for x0 in cfg.INITIAL_VALUES_SYSTEMATIC_MULTISTART:
+        result = minimize(
+            fitter.target,
+            x0=x0,
+            method=cfg.OPTIMIZER_METHOD,
+            bounds=bounds,
+            tol=cfg.OPTIMIZER_TOL,
+            options={"maxiter": cfg.OPTIMIZER_MAXITER},
+        )
+        if best_result is None:
+            best_result = result
+            continue
+        # Prefer converged over not-converged; among like-flagged, prefer
+        # lower objective. This avoids picking a converged-but-worse fit
+        # over a not-converged-but-lower-objective one that just needed
+        # more iterations.
+        if result.success and not best_result.success:
+            best_result = result
+        elif result.success == best_result.success and result.fun < best_result.fun:
+            best_result = result
+
+    return best_result
 
 
 def systematic_row(ticker: str, date_str: str, tenor: int, result, n_obs: int) -> dict:
