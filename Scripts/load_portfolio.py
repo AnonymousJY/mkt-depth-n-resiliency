@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 from typing import List
 from collections import namedtuple
 
@@ -25,8 +22,25 @@ Portfolio = namedtuple(
 
 
 def get_idiosyncratic_ids() -> List[str]:
-    names = ["COIN"]
-    return names
+    """Names of the idiosyncratic underlyings the pipeline calibrates.
+
+    Reads from Scripts/config_skew.py:IDIOSYNCRATIC_UNDERLYINGS so that
+    adding a new name (e.g. "AAPL") is a one-place edit in config_skew.py;
+    the seven downstream callers of this function -- run_pmle_kimyi2025.py,
+    run_var_kimyi2025.ipynb, collar_asian.ipynb, skew_target_idi.py,
+    export_snapshots.py, skew_calibrate_{systematic,idiosyncratic}.py, and
+    this module's own __main__ -- pick it up automatically.
+
+    Prior to the config-consolidation refactor this returned a hard-coded
+    ``["COIN"]``; config_skew.py used to import this function to populate
+    IDIOSYNCRATIC_TICKERS, and that arrow now runs the other way.
+
+    The import is deferred to call time so this module can still be imported
+    before Scripts/ is on sys.path (e.g. from a notebook whose CWD is a
+    sibling directory).
+    """
+    import config_skew as cfg  # deferred import; see docstring.
+    return list(cfg.IDIOSYNCRATIC_UNDERLYINGS.keys())
 
 
 # ----------------------------------------------------------------------------

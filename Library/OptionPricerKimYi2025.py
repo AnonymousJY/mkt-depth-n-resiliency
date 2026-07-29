@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import numpy as np
 from numpy.typing import NDArray
 from Library.OptionPricerKou2002 import kou_call, kou_put

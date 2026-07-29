@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 skew_sensitivity.py — translate KimYi jump parameters into skew vol points.
 

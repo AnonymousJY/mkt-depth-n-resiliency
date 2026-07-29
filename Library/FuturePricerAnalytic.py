@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """Closed-form pricing of equity (index) forwards / futures under full cost-of-carry.
 
 Fair (par) future price:   F = S0 * exp((r - q - b) * T)

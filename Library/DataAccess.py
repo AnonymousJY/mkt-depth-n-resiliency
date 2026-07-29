@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 DataAccess.py — unified data layer for the mkt-depth-n-resiliency project.
 

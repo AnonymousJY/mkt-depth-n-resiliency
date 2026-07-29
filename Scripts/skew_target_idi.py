@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 skew_target_idi.py — per-asset solver for uniform idiosyncratic skew steepening.
 

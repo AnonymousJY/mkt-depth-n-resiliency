@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import numpy as np
 from numpy.typing import NDArray
 from scipy.optimize import newton
@@ -36,6 +33,14 @@ class KimYiSkewCalibrationSystematic(SkewCalibrationBase):
     def target(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
 
         mod_imp_vol = self.model_vol(x=x)
+
+        # If Newton IV-inversion diverged for any strike inside model_vol(),
+        # the resulting NaN(s) would poison the sum below. Return a large
+        # finite penalty so SLSQP sees "very high objective" and moves away
+        # from this parameter region, rather than crashing outright on a
+        # pathological (sigma, pprob, lamb, eta1, eta2) trial.
+        if not np.all(np.isfinite(mod_imp_vol)):
+            return np.array(1e6)
 
         return 0.5 * np.sum((self.mkt_imp_vol - mod_imp_vol) ** 2 * self.option_weights) + self.penalty
 
@@ -164,6 +169,14 @@ class KimYiSkewCalibrationIdiosyncratic(SkewCalibrationBase):
     def target(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
 
         mod_imp_vol = self.model_vol(x=x)
+
+        # If Newton IV-inversion diverged for any strike inside model_vol(),
+        # the resulting NaN(s) would poison the sum below. Return a large
+        # finite penalty so SLSQP sees "very high objective" and moves away
+        # from this parameter region, rather than crashing outright on a
+        # pathological (sigma, pprob, lamb, eta1, eta2) trial.
+        if not np.all(np.isfinite(mod_imp_vol)):
+            return np.array(1e6)
 
         return 0.5 * np.sum((self.mkt_imp_vol - mod_imp_vol) ** 2 * self.option_weights) + self.penalty
 
@@ -340,12 +353,29 @@ def _kimyi_imp_vol_call(
 
     obj_func = lambda x: bsm_call_obj.price(volatility=x) - prices
 
-    mod_iv_call = newton(
-        func=obj_func,
-        x0=np.array([1.5] * prices.shape[0]).reshape((-1, 1)),
-        fprime=bsm_call_obj.vega,
-        fprime2=bsm_call_obj.vomma
-    )
+    # Brenner-Subrahmanyam ATM approximation as initial guess (much closer
+    # to the true IV than a fixed 1.5 for typical equity options), clamped
+    # to a sane range so Newton starts inside the well-behaved region of
+    # the BSM price(vol) curve. Wrapped in try/except because scipy.newton
+    # raises RuntimeError when its default 50 iterations don't converge --
+    # which happens when the outer SLSQP tries a pathological (sigma,
+    # pprob, lamb, eta1, eta2) combination that pushes model prices near
+    # the arbitrage bounds. Returning NaN signals failure to model_vol,
+    # which the target() below catches and turns into a large finite
+    # penalty so SLSQP moves away instead of crashing.
+    approx = np.abs(prices) / (0.4 * und_price * np.sqrt(np.maximum(time_to_expiry, 1e-8)) + 1e-10)
+    x0 = np.clip(approx, 0.05, 3.0).reshape((-1, 1))
+    try:
+        mod_iv_call = newton(
+            func=obj_func,
+            x0=x0,
+            fprime=bsm_call_obj.vega,
+            fprime2=bsm_call_obj.vomma,
+            maxiter=200,
+            tol=1e-8,
+        )
+    except RuntimeError:
+        mod_iv_call = np.full(prices.shape, np.nan).reshape((-1, 1))
 
     # mod_iv_call = newton_raphson(
     #     func=bsm_call_obj.price,
@@ -401,12 +431,21 @@ def _kimyi_imp_vol_put(
 
     obj_func = lambda x: bsm_put_obj.price(volatility=x) - prices
 
-    mod_iv_put = newton(
-        func=obj_func,
-        x0=np.array([1.5] * prices.shape[0]).reshape((-1, 1)),
-        fprime=bsm_put_obj.vega,
-        fprime2=bsm_put_obj.vomma
-    )
+    # See _kimyi_imp_vol_call above for the rationale on x0, maxiter, and
+    # try/except -- same treatment for symmetry.
+    approx = np.abs(prices) / (0.4 * und_price * np.sqrt(np.maximum(time_to_expiry, 1e-8)) + 1e-10)
+    x0 = np.clip(approx, 0.05, 3.0).reshape((-1, 1))
+    try:
+        mod_iv_put = newton(
+            func=obj_func,
+            x0=x0,
+            fprime=bsm_put_obj.vega,
+            fprime2=bsm_put_obj.vomma,
+            maxiter=200,
+            tol=1e-8,
+        )
+    except RuntimeError:
+        mod_iv_put = np.full(prices.shape, np.nan).reshape((-1, 1))
 
     # mod_iv_put = newton_raphson(
     #     func=bsm_put_obj.price,

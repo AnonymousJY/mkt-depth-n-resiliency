@@ -36,6 +36,7 @@ nutpie>=0.13        # default NUTS sampler in RiskEngineKimYi2025.py
 FinanceDataReader>=0.9.50   # live SPX / COIN price series
 databento>=0.34             # options data (used in the Study notebooks)
 ustreasurycurve>=0.1        # US Treasury curve (discounting)
+polars                      # required by ustreasurycurve; not auto-installed as a dependency
 pyarrow>=14.0               # parquet snapshot I/O
 
 # --- option-pricing utilities ---
@@ -44,6 +45,9 @@ nelson-siegel-svensson>=0.5  # NSS curve fit used in skew calibration
 # --- plotting ---
 matplotlib>=3.7
 seaborn>=0.13
+
+# --- CLI ergonomics ---
+tqdm>=4.65          # progress bars in skew_calibrate_{systematic,idiosyncratic}.py
 
 # --- notebook execution ---
 jupyter>=1.0

@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 run_pmle_kimyi2025.py — P-MLE calibration driver (database-free).
 

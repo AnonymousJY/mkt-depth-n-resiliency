@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 skew_target.py — invert: find η₁ and η₂ that achieve target skew steepening.
 

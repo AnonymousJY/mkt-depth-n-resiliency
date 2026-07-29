@@ -35,6 +35,15 @@ Thumbs.db
 # as part of the replication package (recommended for archival).
 # data/snapshots/
 
+# QLSQ skew-calibration cache -- regenerable via
+# Scripts/skew_calibrate_{systematic,idiosyncratic}.py. Kept out of the
+# repo because (a) it can be large as the sample window grows, and (b)
+# calibration is deterministic given the code + market data so the cache
+# is redundant with a reproducibility harness.
+Study/Estimated Parameters QLSQ/*.parquet
+Study/Estimated Parameters QLSQ/*.pkl
+Study/Estimated Parameters QLSQ/*.csv
+
 # scratch / exploratory notebooks (keep out of the replication package)
 scratch_pad.ipynb
 Scripts/test.ipynb

@@ -37,10 +37,17 @@ dependencies:
   - matplotlib>=3.7
   - seaborn>=0.13
 
+  # --- CLI ergonomics ---
+  - tqdm>=4.65          # progress bars in skew_calibrate_{systematic,idiosyncratic}.py
+
   # --- io / notebook execution ---
   - pyarrow>=14.0
   - jupyter>=1.0
   - nbconvert>=7.0
+
+  # --- required by ustreasurycurve (pip, below) but available on conda-forge,
+  # so installed via conda rather than left for pip to resolve ---
+  - polars
 
   # --- optional GPU acceleration ---
   # Uncomment the line matching your CUDA toolkit to let ImportLibs.py

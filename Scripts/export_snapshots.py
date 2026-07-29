@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 export_snapshots.py — freeze live data sources into committed snapshots.
 
