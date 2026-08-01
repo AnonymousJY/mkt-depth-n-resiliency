@@ -46,7 +46,7 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Only consulted when a given underlying's "data_path" is None -- see
 # SYSTEMATIC_UNDERLYING / IDIOSYNCRATIC_UNDERLYINGS below.
 DATA_PATH_IMPLIED_VOL = os.path.expanduser(
-    "~/Library/Mobile Documents/com~apple~CloudDocs/Data/Implied Volatility"
+    "~/Data/ImpliedVolatility"
 )
 
 # Where calibration results are cached: a wide Parquet table, one row per
@@ -239,6 +239,7 @@ INITIAL_VALUES_SYSTEMATIC_MULTISTART = [
     np.array([0.20, 0.20,  5.0, 22.0,  7.0]),  # baseline (paper's April 2025 window)
     np.array([0.35, 0.40, 15.0, 15.0,  5.0]),  # high vol regime      (2008, 2020)
     np.array([0.25, 0.30, 10.0, 12.0,  3.0]),  # heavy-tail regime
+    np.array([0.10, 0.90, 30.0,  5.0,  2.0]),  # extreme jump-dominated (crisis / ultra-short-dated)
 ]
 
 # Back-compat alias -- kept so the migrate script and any other consumer
