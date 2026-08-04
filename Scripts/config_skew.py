@@ -170,7 +170,7 @@ VALUATION_DATE_END = "2025-04-17"
 # Option filters (applied before calibration, matching the notebook)
 # ---------------------------------------------------------------------------
 MIN_TRADE_VOLUME = 0     # keep rows with trade_volume > MIN_TRADE_VOLUME
-MIN_EXPIRY_DAYS = 5      # keep rows with iEXPIRY > MIN_EXPIRY_DAYS
+MIN_EXPIRY_DAYS = 6      # keep rows with iEXPIRY > MIN_EXPIRY_DAYS
 MONEYNESS_PUT_RANGE = (50.0, 100.0)   # puts:  50% <= moneyness <= 100%
 MONEYNESS_CALL_RANGE = (100.0, 150.0)  # calls: 100% <= moneyness <= 150%
 

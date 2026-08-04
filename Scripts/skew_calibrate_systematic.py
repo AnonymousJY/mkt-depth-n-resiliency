@@ -513,7 +513,7 @@ def systematic_row(ticker: str, date_str: str, tenor: int, result, n_obs: int) -
     }
     row.update(SYSTEMATIC_FIXED_PARAMS)
     row.update(dict(zip(SYSTEMATIC_PARAM_NAMES, result.x)))
-    row["bCONVERGED"] = bool(result.success)
+    row["bCONVERGED"] = bool(result.success) and float(result.fun) < 1e5
     row["dOBJECTIVE"] = float(result.fun)
     row["iN_OBS"] = int(n_obs)
     return row

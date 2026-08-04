@@ -100,11 +100,15 @@ logger = logging.getLogger(__name__)
 def get_systematic_params(
     cache: dict, systematic_ticker: str, valuation_date_str: str, tenor: int,
 ) -> Optional[np.ndarray]:
-    """The cached systematic (sigma, pprob, lamb, eta1, eta2) for one
-    (systematic_ticker, date, tenor), or None if that triple hasn't been
-    calibrated systematically yet."""
     row = cache.get((systematic_ticker, valuation_date_str, tenor))
-    return None if row is None else np.array([row[p] for p in SYSTEMATIC_PARAM_NAMES])
+    if row is None:
+        return None
+    # Reject penalty-region rows: SLSQP reported success but really got stuck.
+    # Idiosyncratic calibration conditional on nonsense systematic params
+    # produces nonsense idiosyncratic params (see COIN 20250411).
+    if row["dOBJECTIVE"] > 1e5:
+        return None
+    return np.array([row[p] for p in SYSTEMATIC_PARAM_NAMES])
 
 
 def diagnose_systematic_availability(cache: dict, systematic_ticker: str) -> None:
@@ -145,7 +149,7 @@ def idiosyncratic_row(
     }
     row.update(dict(zip(IDIOSYNCRATIC_PARAM_NAMES, result.x)))
     row.update(dict(zip(SYSTEMATIC_PARAM_NAMES, systematic_params)))
-    row["bCONVERGED"] = bool(result.success)
+    row["bCONVERGED"] = bool(result.success) and float(result.fun) < 1e5
     row["dOBJECTIVE"] = float(result.fun)
     row["iN_OBS"] = int(n_obs)
     return row
