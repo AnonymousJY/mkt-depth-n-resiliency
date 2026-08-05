@@ -262,10 +262,9 @@ def calibrate_date_idiosyncratic(df_date: pd.DataFrame, systematic_params: np.nd
     best (converged, lowest-objective) result. See the systematic version's
     docstring for the full rationale.
     """
-    weights = df_date["dVEGA"].to_numpy()
-    weight_sum = weights.sum()
-    if weight_sum <= 0:
-        raise ValueError("Vega weights sum to zero; check the input smile.")
+    # Same weighting scheme as the systematic stage (see cfg.OBJECTIVE_WEIGHTING).
+    from Scripts.skew_calibrate_systematic import _compute_option_weights
+    weights = _compute_option_weights(df_date["dVEGA"].to_numpy())
 
     sigma, pprob, lamb, eta1, eta2 = systematic_params
 
@@ -279,7 +278,7 @@ def calibrate_date_idiosyncratic(df_date: pd.DataFrame, systematic_params: np.nd
         dividend_yield=df_date["dDIVIDEND_YIELD"].to_numpy(),
         time_to_expiry=df_date["dEXPIRY"].to_numpy(),
         is_call_option=df_date["bIS_CALL_OPTION"].to_numpy(),
-        option_weights=weights / weight_sum,
+        option_weights=weights,
     )
 
     bounds = [cfg.BOUNDS_IDIOSYNCRATIC[p] for p in IDIOSYNCRATIC_PARAM_NAMES]

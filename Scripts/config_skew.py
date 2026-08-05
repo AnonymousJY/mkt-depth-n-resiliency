@@ -290,6 +290,29 @@ OPTIMIZER_TOL = 1e-6
 OPTIMIZER_MAXITER = 10_000
 
 # ---------------------------------------------------------------------------
+# Objective weighting
+# ---------------------------------------------------------------------------
+# How to weight the per-strike IV residuals in the least-squares objective:
+#     objective = 0.5 * sum( weight_i * (mkt_iv_i - mod_iv_i)^2 )
+#
+#   "vega"      -- BSM put vega at each strike (dPnL / dsigma). Approximately
+#                  converts the IV residuals into price residuals. Standard
+#                  in academic vol-surface calibration, but concentrates
+#                  ~90% of the loss in the narrow ATM band (vega drops off
+#                  exponentially in log-moneyness), so SLSQP can find a
+#                  global minimum that nails ATM at the cost of deep-OTM.
+#   "sqrt_vega" -- sqrt(vega). Halves the ATM dominance (in log-space).
+#                  Compromise between the "prices are what matter"
+#                  argument (vega) and the "smile should look right
+#                  everywhere" argument (uniform). Recommended default:
+#                  restores visually balanced fits without abandoning
+#                  the price-space justification.
+#   "uniform"   -- every strike counts equally. Best visual coverage of
+#                  the wings; may slightly degrade ATM fit and is more
+#                  sensitive to noisy deep-OTM quotes (thin liquidity).
+OBJECTIVE_WEIGHTING = "sqrt_vega"
+
+# ---------------------------------------------------------------------------
 # Parallelism
 # ---------------------------------------------------------------------------
 # Number of worker processes used by both calibration scripts.

@@ -447,6 +447,30 @@ def _make_synthetic_market_vol_data(ticker: str) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Calibration
 # ---------------------------------------------------------------------------
+def _compute_option_weights(vega: np.ndarray) -> np.ndarray:
+    """Build the per-strike objective weights from cfg.OBJECTIVE_WEIGHTING.
+    Returns weights that sum to 1 (the calibration classes expect
+    normalized weights)."""
+    if cfg.OBJECTIVE_WEIGHTING == "vega":
+        raw = vega
+    elif cfg.OBJECTIVE_WEIGHTING == "sqrt_vega":
+        raw = np.sqrt(np.maximum(vega, 0.0))
+    elif cfg.OBJECTIVE_WEIGHTING == "uniform":
+        raw = np.ones_like(vega)
+    else:
+        raise ValueError(
+            f"Unknown OBJECTIVE_WEIGHTING: {cfg.OBJECTIVE_WEIGHTING!r}. "
+            f"Expected 'vega', 'sqrt_vega', or 'uniform'."
+        )
+    total = raw.sum()
+    if total <= 0:
+        raise ValueError(
+            f"Option weights sum to zero under OBJECTIVE_WEIGHTING="
+            f"{cfg.OBJECTIVE_WEIGHTING!r}; check the input smile."
+        )
+    return raw / total
+
+
 def calibrate_date_systematic(df_date: pd.DataFrame):
     """Fit the systematic Kim-Yi (2025) parameters to one date's smile.
 
@@ -460,10 +484,7 @@ def calibrate_date_systematic(df_date: pd.DataFrame):
     'Best' = converged AND lowest objective. Falls back to lowest
     objective overall if none converged.
     """
-    weights = df_date["dVEGA"].to_numpy()
-    weight_sum = weights.sum()
-    if weight_sum <= 0:
-        raise ValueError("Vega weights sum to zero; check the input smile.")
+    weights = _compute_option_weights(df_date["dVEGA"].to_numpy())
 
     fitter = KimYiSkewCalibrationSystematic(
         mkt_imp_vol=df_date["dMKT_IMP_VOL"].to_numpy(),
@@ -473,7 +494,7 @@ def calibrate_date_systematic(df_date: pd.DataFrame):
         dividend_yield=df_date["dDIVIDEND_YIELD"].to_numpy(),
         time_to_expiry=df_date["dEXPIRY"].to_numpy(),
         is_call_option=df_date["bIS_CALL_OPTION"].to_numpy(),
-        option_weights=weights / weight_sum,
+        option_weights=weights,
     )
 
     bounds = [cfg.BOUNDS_SYSTEMATIC[p] for p in SYSTEMATIC_PARAM_NAMES]
