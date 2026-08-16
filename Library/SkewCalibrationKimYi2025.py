@@ -353,18 +353,15 @@ def _kimyi_imp_vol_call(
 
     obj_func = lambda x: bsm_call_obj.price(volatility=x) - prices
 
-    # Brenner-Subrahmanyam ATM approximation as initial guess (much closer
-    # to the true IV than a fixed 1.5 for typical equity options), clamped
-    # to a sane range so Newton starts inside the well-behaved region of
-    # the BSM price(vol) curve. Wrapped in try/except because scipy.newton
-    # raises RuntimeError when its default 50 iterations don't converge --
-    # which happens when the outer SLSQP tries a pathological (sigma,
-    # pprob, lamb, eta1, eta2) combination that pushes model prices near
-    # the arbitrage bounds. Returning NaN signals failure to model_vol,
-    # which the target() below catches and turns into a large finite
-    # penalty so SLSQP moves away instead of crashing.
-    approx = np.abs(prices) / (0.4 * und_price * np.sqrt(np.maximum(time_to_expiry, 1e-8)) + 1e-10)
-    x0 = np.clip(approx, 0.05, 3.0).reshape((-1, 1))
+    # Initial guess x0=1.5 (150% vol) matches the paper's original code.
+    # Starting high gives Newton non-negligible BSM vega even at deep OTM
+    # strikes, whereas a strike-adaptive low x0 (e.g. Brenner-Subrahmanyam)
+    # can leave Newton stuck at the floor for deep-OTM options where BSM
+    # vega at low vol is ~zero. Wrapped in try/except because scipy.newton
+    # raises RuntimeError when its 200 iterations don't converge -- happens
+    # when the outer SLSQP tries a pathological (sigma, pprob, lamb, eta1,
+    # eta2) combination that pushes model prices near the arbitrage bounds.
+    x0 = np.full(prices.shape, 1.5).reshape((-1, 1))
     try:
         mod_iv_call = newton(
             func=obj_func,
@@ -378,10 +375,13 @@ def _kimyi_imp_vol_call(
         mod_iv_call = np.full(prices.shape, np.nan).reshape((-1, 1))
 
     # Newton can also silently return inf/NaN (via overflow warnings, not
-    # exceptions) when the outer SLSQP tries a pathological (sigma, pprob,
-    # lamb, eta1, eta2) combination. Treat those the same way as a RuntimeError.
-    if not np.all(np.isfinite(mod_iv_call)):
-        mod_iv_call = np.full(prices.shape, np.nan).reshape((-1, 1))
+    # exceptions) for individual strikes when the outer SLSQP tries a
+    # pathological (sigma, pprob, lamb, eta1, eta2) combination. Mark only
+    # those bad entries as NaN -- keep the good ones intact so plotting +
+    # per-strike diagnostics still work. target() below checks isfinite on
+    # the whole array and returns a 1e6 penalty if any NaN is present, so
+    # SLSQP's avoidance behavior is preserved.
+    mod_iv_call = np.where(np.isfinite(mod_iv_call), mod_iv_call, np.nan)
 
     # mod_iv_call = newton_raphson(
     #     func=bsm_call_obj.price,
@@ -437,10 +437,9 @@ def _kimyi_imp_vol_put(
 
     obj_func = lambda x: bsm_put_obj.price(volatility=x) - prices
 
-    # See _kimyi_imp_vol_call above for the rationale on x0, maxiter, and
-    # try/except -- same treatment for symmetry.
-    approx = np.abs(prices) / (0.4 * und_price * np.sqrt(np.maximum(time_to_expiry, 1e-8)) + 1e-10)
-    x0 = np.clip(approx, 0.05, 3.0).reshape((-1, 1))
+    # See _kimyi_imp_vol_call above for the rationale on x0=1.5, maxiter=200,
+    # try/except, and per-strike NaN handling -- same treatment for symmetry.
+    x0 = np.full(prices.shape, 1.5).reshape((-1, 1))
     try:
         mod_iv_put = newton(
             func=obj_func,
@@ -453,9 +452,8 @@ def _kimyi_imp_vol_put(
     except RuntimeError:
         mod_iv_put = np.full(prices.shape, np.nan).reshape((-1, 1))
 
-    # See _kimyi_imp_vol_call above for the rationale on the isfinite check.
-    if not np.all(np.isfinite(mod_iv_put)):
-        mod_iv_put = np.full(prices.shape, np.nan).reshape((-1, 1))
+    # See _kimyi_imp_vol_call above for the per-strike NaN rationale.
+    mod_iv_put = np.where(np.isfinite(mod_iv_put), mod_iv_put, np.nan)
 
     # mod_iv_put = newton_raphson(
     #     func=bsm_put_obj.price,

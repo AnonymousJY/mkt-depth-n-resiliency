@@ -212,16 +212,29 @@ def make_plot(ticker: str, valuation_date: str, tenor: int, out_path: Optional[s
     plt.setp(ax.get_legend().get_title(), fontsize="16", fontweight="bold")
 
     # Report the residual so the user can eyeball fit quality at a glance.
-    weighted_resid = np.sqrt(
-        np.average(
-            (plot_df["dMKT_IMP_VOL"].to_numpy() - model_iv) ** 2,
-            weights=plot_df["dVEGA"].to_numpy() / plot_df["dVEGA"].sum(),
+    # NaN-aware: some strikes may return NaN model IV when the Kim-Yi model
+    # produces prices outside the BSM-invertible range; those points are
+    # excluded from the residual average and reported separately.
+    mkt_iv = plot_df["dMKT_IMP_VOL"].to_numpy()
+    vega   = plot_df["dVEGA"].to_numpy()
+    resid_sq = (mkt_iv - model_iv) ** 2
+    finite = np.isfinite(resid_sq)
+    n_nan = int((~finite).sum())
+    if finite.any():
+        w = vega[finite] / vega[finite].sum()
+        weighted_resid = np.sqrt(np.average(resid_sq[finite], weights=w))
+        logger.info(
+            "RMS residual (vega-weighted, decimal IV units): %.4f  (=%.2f vol points)",
+            weighted_resid, weighted_resid * 100.0,
         )
-    )
-    logger.info(
-        "RMS residual (vega-weighted, decimal IV units): %.4f  (=%.2f vol points)",
-        weighted_resid, weighted_resid * 100.0,
-    )
+    else:
+        logger.warning("All strikes returned NaN model IV; cannot compute RMS residual.")
+    if n_nan:
+        logger.warning(
+            "%d of %d strikes had non-finite model IV (Kim-Yi price outside BSM-invertible range); "
+            "excluded from residual average and dropped from the plot.",
+            n_nan, len(model_iv),
+        )
     logger.info("Cached dOBJECTIVE: %.6f", float(params["dOBJECTIVE"]))
 
     if out_path:
