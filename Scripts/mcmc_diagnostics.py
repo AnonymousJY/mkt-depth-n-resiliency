@@ -59,7 +59,7 @@ from Library.RiskEngineKimYi2025 import (  # noqa: E402
 # Configuration (mirrors run_pmle_kimyi2025.py)
 # ----------------------------------------------------------------------------
 SYSTEMATIC_TICKER = "^SPX"
-LOOKBACK = 252
+DEFAULT_LOOKBACK = 252
 DELTA_T = np.array(1.0 / 252.0)
 DEFAULT_SEED = 20240114
 DEFAULT_N_DRAWS = 10_000
@@ -265,6 +265,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--valuation-date", required=True, help="YYYYMMDD")
     ap.add_argument("--ticker", required=True, help="e.g. COIN, ^SPX")
+    ap.add_argument(
+        "--lookback",
+        type=int,
+        default=DEFAULT_LOOKBACK,
+        help="Number of trailing business days of returns to use.",
+    )
     ap.add_argument("--n-draws", type=int, default=DEFAULT_N_DRAWS)
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
     ap.add_argument(
@@ -278,18 +284,19 @@ def main():
     ticker = args.ticker
     is_sys = ticker == SYSTEMATIC_TICKER
 
+    lookback = args.lookback
     tickers = [ticker] if is_sys else [SYSTEMATIC_TICKER, ticker]
     price_ts = get_price_panel(tickers)
     return_ts = price_ts.pct_change().dropna()
     return_vec = (
         return_ts.loc[return_ts.index <= date, ticker]
-        .iloc[-LOOKBACK:]
+        .iloc[-lookback:]
         .to_numpy()
     )
-    if len(return_vec) < LOOKBACK:
+    if len(return_vec) < lookback:
         raise SystemExit(
             f"Insufficient history for {ticker} at {date}: "
-            f"got {len(return_vec)} observations, need {LOOKBACK}."
+            f"got {len(return_vec)} observations, need {lookback}."
         )
 
     if is_sys:
@@ -306,10 +313,10 @@ def main():
         sample_vars = IDI_SAMPLE_VARS
         natural_vars = IDI_NATURAL_VARS
 
-    out_dir = Path(args.out_dir) / f"{date}_{ticker.replace('^', '')}"
+    out_dir = Path(args.out_dir) / f"{date}_{ticker.replace('^', '')}_L{lookback}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Sampling {ticker} {date}: {args.n_draws} draws x 4 chains...")
+    print(f"Sampling {ticker} {date} (lookback={lookback}): {args.n_draws} draws x 4 chains...")
     with model:
         rng = np.random.default_rng(np.uint64(args.seed))
         idata = pm.sample(
