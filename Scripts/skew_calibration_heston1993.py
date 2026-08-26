@@ -156,9 +156,7 @@ for valuation_date in valuation_date_array:
 
         key = f'{systematic_name}-{valuation_date_str}'
 
-        display('--------')
-        display(key)
-        display('--------')
+        logger.info('-------- %s --------', key)
 
         if key in calib_results.keys():
             pass
@@ -200,7 +198,7 @@ for valuation_date in valuation_date_array:
                 constraints=({'type': 'ineq', 'fun': feller_condition})
             )
 
-            display(minimizer_results)
+            logger.info("minimize result: %s", minimizer_results)
 
             results_[valuation_date_str] = minimizer_results
 

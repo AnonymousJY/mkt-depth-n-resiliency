@@ -180,9 +180,7 @@ if not len(calib_results) > 0:
 
             key = f'{systematic_name}-{valuation_date_str}'
 
-            display('--------')
-            display(key)
-            display('--------')
+            logger.info('-------- %s --------', key)
 
             if key in calib_results.keys():
                 pass
@@ -223,7 +221,7 @@ if not len(calib_results) > 0:
                     options={'maxiter': 1e4}
                 )
 
-                display(minimizer_results)
+                logger.info("minimize result: %s", minimizer_results)
 
                 results_[valuation_date_str] = minimizer_results
 
@@ -239,9 +237,7 @@ if not len(calib_results) > 0:
 
                 key = f'{underlying_name}-{valuation_date_str}'
 
-                display('--------')
-                display(key)
-                display('--------')
+                logger.info('-------- %s --------', key)
 
                 if key in calib_results.keys():
                     pass
@@ -289,7 +285,7 @@ if not len(calib_results) > 0:
                         # constraints=({'type': 'ineq', 'fun': psi_constraint_aggregate})
                     )
 
-                    display(minimizer_results)
+                    logger.info("minimize result: %s", minimizer_results)
 
                     results_[valuation_date_str] = minimizer_results
 
