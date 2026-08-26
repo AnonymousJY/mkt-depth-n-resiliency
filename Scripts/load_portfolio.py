@@ -1,3 +1,10 @@
+# Ensure package imports resolve regardless of cwd.
+import sys as _sys
+from pathlib import Path as _Path
+_REPO_ROOT = _Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in _sys.path:
+    _sys.path.insert(0, str(_REPO_ROOT))
+
 from typing import List
 from collections import namedtuple
 
@@ -88,8 +95,8 @@ def build_portfolio(valuation_date: str, idiosyncratic_id: str) -> List[Portfoli
     collar_put = Portfolio(
         sVALUATION_DATE=valuation_date,
         sIDIOSYNCRATIC_ID=idiosyncratic_id,
-        sTYPOLOGY='collar',
-        sSTRATEGY='asian discrete',
+        sTYPOLOGY='asian discrete',
+        sSTRATEGY='collar',
         sPAYOFF_TYPE='put',
         sEXPIRY_DATE=EXPIRY_DATE,
         dSTRIKE_PRICE=COLLAR_STRIKE_PUT,
@@ -102,8 +109,8 @@ def build_portfolio(valuation_date: str, idiosyncratic_id: str) -> List[Portfoli
     collar_call = Portfolio(
         sVALUATION_DATE=valuation_date,
         sIDIOSYNCRATIC_ID=idiosyncratic_id,
-        sTYPOLOGY='collar',
-        sSTRATEGY='asian discrete',
+        sTYPOLOGY='asian discrete',
+        sSTRATEGY='collar',
         sPAYOFF_TYPE='call',
         sEXPIRY_DATE=EXPIRY_DATE,
         dSTRIKE_PRICE=COLLAR_STRIKE_CALL,

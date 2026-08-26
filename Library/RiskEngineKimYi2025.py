@@ -12,7 +12,7 @@ from Library.Random import RandomBase, RandomMT19937
 from Library.Parameters import ParametersBase, ParametersConstant
 
 
-ParamsResults = namedtuple('ParamsResult', ["dMEAN", "dCI_LOWER", "dCI_UPPER"])
+ParamsResults = namedtuple('ParamsResults', ["dMEAN", "dCI_LOWER", "dCI_UPPER"])
 
 
 def simulate_shock_returns(

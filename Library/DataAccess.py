@@ -172,7 +172,13 @@ def get_pmle_params_dict(valuation_date, underlying_name, params=None):
     """
     series = get_pmle_params(valuation_date, underlying_name)
     if params is None:
-        params = [c for c in series.index if c.startswith("d") and "_CI_" not in c]
+        # Numeric model parameters begin with 'd' (e.g., dALPHA, dSIGMA) but
+        # exclude the date column 'dtVALUATION_DATE' and the credible-interval
+        # bounds '*_CI_LOWER'/'*_CI_UPPER'.
+        params = [
+            c for c in series.index
+            if c.startswith("d") and not c.startswith("dt") and "_CI_" not in c
+        ]
     return {k: float(series[k]) for k in params}
 
 

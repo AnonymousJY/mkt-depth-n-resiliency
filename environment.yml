@@ -59,5 +59,5 @@ dependencies:
   - pip:
       - finance-datareader   # live SPX / COIN price series
       - databento>=0.34            # options data (Study notebooks)
-      - ustreasurycurve       # US Treasury curve (discounting)
+      - ustreasurycurve==0.0.5   # US Treasury curve (discounting); pin: 0.0.6+ has an incomplete polars migration that fails on pandas
       - nelson-siegel-svensson>=0.5  # NSS curve fit (skew calibration)

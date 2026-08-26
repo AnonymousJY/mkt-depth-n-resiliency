@@ -35,7 +35,7 @@ nutpie>=0.13        # default NUTS sampler in RiskEngineKimYi2025.py
 # --- market & reference data ---
 FinanceDataReader>=0.9.50   # live SPX / COIN price series
 databento>=0.34             # options data (used in the Study notebooks)
-ustreasurycurve>=0.1        # US Treasury curve (discounting)
+ustreasurycurve==0.0.5      # US Treasury curve (discounting); pin: 0.0.6+ has an incomplete polars migration that fails on pandas
 polars                      # required by ustreasurycurve; not auto-installed as a dependency
 pyarrow>=14.0               # parquet snapshot I/O
 
