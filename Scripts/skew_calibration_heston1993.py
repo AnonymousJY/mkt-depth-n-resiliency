@@ -142,67 +142,84 @@ bounds_systematic = {
     'dLAMBD': (-1., 1.)
 }
 
-calib_results = {}
+# Load any previously-persisted calibration results so we can resume after
+# a crash instead of redoing hours of SLSQP work.
+from Library.Serialization import save_calibration_results, load_calibration_results
+_heston_calib_path = str(_REPO_ROOT / "Study" / "Estimated Parameters QLSQ" / "heston1993_vol_calibration")
+try:
+    calib_results = load_calibration_results(_heston_calib_path)
+    logger.info("Resuming from cached heston1993 calibration (%d keys)", len(calib_results))
+except FileNotFoundError:
+    calib_results = {}
+    logger.info("No prior heston1993 calibration cache; starting fresh.")
+
+_heston_calib_parquet = _heston_calib_path + ".parquet"
+
+
+def _calibrate_heston_for(name, valuation_date):
+    """Run SLSQP Heston calibration for one (ticker, date) and update cache.
+
+    Saves calib_results to parquet after every successful minimize so a later
+    crash cannot lose completed work.
+    """
+    valuation_date_str = valuation_date.strftime("%Y%m%d")
+    key = f'{name}-{valuation_date_str}'
+    logger.info('-------- %s --------', key)
+    if key in calib_results:
+        logger.info("skip (cached)")
+        return
+
+    T = EXPIRY_MAP[valuation_date.weekday()]
+    if (valuation_date >= pd.to_datetime('20250407')) and (valuation_date < pd.to_datetime('20250414')):
+        T = T - 1
+
+    mask  = (mkt_vol_df.underlying_symbol==name)
+    mask &= (mkt_vol_df.quote_date==valuation_date)
+    mask &= (mkt_vol_df.iEXPIRY==T)
+    mask &= (mkt_vol_df.dMONEYNESS >= 50.)
+    mask &= (mkt_vol_df.dMONEYNESS <= 150.)
+    tmp_df = mkt_vol_df.loc[mask].sort_values('dMONEYNESS')
+    if len(tmp_df) == 0:
+        logger.warning("no market vols for %s; skipping", key)
+        return
+
+    vol_fitter = HestonSkewCalibration(
+        mkt_imp_vol=tmp_df.dMKT_IMP_VOL.to_numpy(),
+        und_price=tmp_df.dUND_PRICE.to_numpy(),
+        und_strike=tmp_df.dUND_STRIKE.to_numpy(),
+        risk_free_rate=tmp_df.dRISK_FREE_RATE.to_numpy(),
+        dividend_yield=tmp_df.dDIVIDEND_YIELD.to_numpy(),
+        time_to_expiry=tmp_df.dEXPIRY.to_numpy(),
+        is_call_option=tmp_df.bIS_CALL_OPTION.to_numpy(),
+        option_weights=tmp_df.dVEGA.to_numpy() / tmp_df.dVEGA.sum(),
+    )
+
+    minimizer_results = minimize(
+        vol_fitter.target,
+        x0=initial_values_systematic,
+        method=method,
+        bounds=bounds_systematic.values(),
+        tol=1e-6,
+        options={'maxiter': 1e4},
+        constraints=({'type': 'ineq', 'fun': feller_condition}),
+    )
+    logger.info("minimize result: %s", minimizer_results)
+    calib_results[key] = minimizer_results
+    # Persist after every successful key so a later crash cannot lose work.
+    save_calibration_results(calib_results, _heston_calib_parquet)
+
 
 # %% cell 5
 logger.info("[cell %d/11] compute systematic_name", 5)
 systematic_name = UND_TICKERS_DICT['systematic']
 
-for valuation_date in valuation_date_array:
-
-    if valuation_date in mkt_vol_df.quote_date.unique():
-
-        valuation_date_str = valuation_date.strftime("%Y%m%d")
-
-        key = f'{systematic_name}-{valuation_date_str}'
-
-        logger.info('-------- %s --------', key)
-
-        if key in calib_results.keys():
-            pass
-        else:
-
-            results_ = {}
-
-            T = EXPIRY_MAP[valuation_date.weekday()]
-
-            if (valuation_date >= pd.to_datetime('20250407')) and (valuation_date < pd.to_datetime('20250414')):
-                T = T - 1
-
-            mask  = (mkt_vol_df.underlying_symbol==systematic_name)
-            mask &= (mkt_vol_df.quote_date==valuation_date)
-            mask &= (mkt_vol_df.iEXPIRY==T)
-            mask &= (mkt_vol_df.dMONEYNESS >= 50.)
-            mask &= (mkt_vol_df.dMONEYNESS <= 150.)
-
-            tmp_df = mkt_vol_df.loc[mask].sort_values('dMONEYNESS')
-
-            vol_fitter = HestonSkewCalibration(
-                mkt_imp_vol=tmp_df.dMKT_IMP_VOL.to_numpy(),
-                und_price=tmp_df.dUND_PRICE.to_numpy(),
-                und_strike=tmp_df.dUND_STRIKE.to_numpy(),
-                risk_free_rate=tmp_df.dRISK_FREE_RATE.to_numpy(),
-                dividend_yield=tmp_df.dDIVIDEND_YIELD.to_numpy(),
-                time_to_expiry=tmp_df.dEXPIRY.to_numpy(),
-                is_call_option=tmp_df.bIS_CALL_OPTION.to_numpy(),
-                option_weights=tmp_df.dVEGA.to_numpy() / tmp_df.dVEGA.sum()
-            )
-
-            minimizer_results = minimize(
-                vol_fitter.target,
-                x0=initial_values_systematic,
-                method=method,
-                bounds=bounds_systematic.values(),
-                tol=1e-6,
-                options={'maxiter': 1e4},
-                constraints=({'type': 'ineq', 'fun': feller_condition})
-            )
-
-            logger.info("minimize result: %s", minimizer_results)
-
-            results_[valuation_date_str] = minimizer_results
-
-            calib_results[key] = minimizer_results
+# Calibrate the systematic underlying (SPX) and every idiosyncratic
+# underlying listed in UND_TICKERS_DICT (e.g. COIN). Figure 5 in the paper
+# overlays the Heston fit against COIN market vols, so both are required.
+for _name in [systematic_name, *UND_TICKERS_DICT['idiosyncratic']]:
+    for valuation_date in valuation_date_array:
+        if valuation_date in mkt_vol_df.quote_date.unique():
+            _calibrate_heston_for(_name, valuation_date)
 
 # %% cell 6
 logger.info("[cell %d/11] compute valuation_date", 6)
@@ -260,11 +277,11 @@ plt.show();
 
 # %% cell 10
 logger.info("[cell %d/11] compute file_path", 10)
-from Library.Serialization import save_calibration_results
-
-file_path = str(_REPO_ROOT / "Study" / "Estimated Parameters QLSQ" / "heston1993_vol_calibration.parquet")
-save_calibration_results(calib_results, file_path)
-logger.info("Saved heston1993 calibration to %s", file_path)
+# Incremental saves happen inside _calibrate_heston_for(); this is a final
+# safety-net save that also covers the (unlikely) case of no calibrations
+# having been added this run (e.g. all keys already cached).
+save_calibration_results(calib_results, _heston_calib_parquet)
+logger.info("Saved heston1993 calibration to %s", _heston_calib_parquet)
 
 # %% cell 11
 logger.info("[cell %d/11] ", 11)
