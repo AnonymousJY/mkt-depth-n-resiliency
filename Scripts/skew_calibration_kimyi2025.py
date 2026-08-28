@@ -429,7 +429,28 @@ und_strikes = np.linspace(50, 150, 101).reshape((-1, 1))
 und_spot = np.array(100.)
 
 vol_surface_rslts = {}
-for valuation_date in [x.strftime("%Y%m%d") for x in valuation_date_array]:
+# Only build the vol surface for dates that have both a systematic and an
+# idiosyncratic calibration result -- otherwise --only-date runs (or partial
+# reruns) crash on a missing key. Missing dates are simply skipped with a
+# warning; the previously-saved vol surface parquet still contains them.
+_sys_prefix = f"{UND_TICKERS_DICT['systematic']}-"
+_idio_prefix = f"{underlying_name}-"
+_available_dates = sorted({
+    k.split("-", 1)[1] for k in calib_results
+    if k.startswith(_sys_prefix)
+} & {
+    k.split("-", 1)[1] for k in calib_results
+    if k.startswith(_idio_prefix)
+})
+_all_dates = [x.strftime("%Y%m%d") for x in valuation_date_array]
+_missing = sorted(set(_all_dates) - set(_available_dates))
+if _missing:
+    logger.warning(
+        "vol-surface loop: skipping %d date(s) missing systematic or "
+        "idiosyncratic calibration: %s",
+        len(_missing), _missing,
+    )
+for valuation_date in _available_dates:
 
     sigma, pprob, lamb, eta1, eta2 = calib_results[f"{UND_TICKERS_DICT['systematic']}-{valuation_date}"].x
     kappai, gammai, betai, rhoix = calib_results[f"{underlying_name}-{valuation_date}"].x
@@ -464,7 +485,7 @@ for valuation_date in [x.strftime("%Y%m%d") for x in valuation_date_array]:
     vol_surface_rslts[f"{underlying_name}-{valuation_date}"] = {'iEXPIRY': expiry_in_days, 'dMONEYNESS': (und_strikes / und_spot).reshape((-1,)), 'dVOL': np.array(skew)}
 
 from Library.Serialization import save_vol_surface
-file_path = str(_REPO_ROOT / "Study" / "Vol Surface From Model" / "kimyi2025_vol_surface_.parquet")
+file_path = str(_REPO_ROOT / "Study" / "Vol Surface From Model" / "kimyi2025_vol_surface.parquet")
 save_vol_surface(vol_surface_rslts, file_path)
 logger.info("Saved kimyi2025 vol surface to %s", file_path)
 
