@@ -151,149 +151,150 @@ bounds_idiosyncratic = {
     'dRHOIX': (-1., 1.)
 }
 
-calib_results = {}
-
 # %% cell 5
-logger.info("[cell %d/14] compute _calib_path", 5)
+logger.info("[cell %d/14] load cached kimyi2025 calibration", 5)
 from Library.Serialization import load_calibration_results, save_calibration_results
+_kimyi_calib_path = os.path.join(DATA_PATH_CALIB_RSLT_STR, "kimyi2025_vol_calibration")
+_kimyi_calib_parquet = _kimyi_calib_path + ".parquet"
 try:
-    _calib_path = os.path.join(DATA_PATH_CALIB_RSLT_STR, "kimyi2025_vol_calibration_")
-    calib_results = load_calibration_results(_calib_path)
-    logger.info("Loaded kimyi2025 calibration from %s(.parquet|.pkl)", _calib_path)
+    calib_results = load_calibration_results(_kimyi_calib_path)
+    logger.info("Resuming from cached kimyi2025 calibration (%d keys)", len(calib_results))
 except FileNotFoundError:
     calib_results = {}
     logger.info("No existing kimyi2025 calibration cache; starting fresh.")
-except Exception as e:
-    print(f"An error occurred while loading the pickle file: {e}")
+
+# Warm-start ("x_hint") table for tricky (underlying, date) fits where the
+# default SLSQP init lands in a shallow secondary basin. Values are the
+# published Q-measure parameters from the paper's Figure 5 caption; using
+# them as x0 nudges the optimizer into the correct basin without changing
+# the objective or bounds. Keys are (underlying, YYYYMMDD).
+IDIOSYNCRATIC_X0_HINTS = {
+    ('COIN', '20250409'): np.array([0.61, 1.61, 0.94, 0.41]),
+}
 
 # %% cell 6
-logger.info("[cell %d/14] if not len(calib_results) > 0:", 6)
-if not len(calib_results) > 0:
+logger.info("[cell %d/14] Kim-Yi skew calibration loop (systematic + idiosyncratic)", 6)
+systematic_name = UND_TICKERS_DICT['systematic']
 
-    systematic_name = UND_TICKERS_DICT['systematic']
 
+def _calibrate_systematic_for(valuation_date):
+    valuation_date_str = valuation_date.strftime("%Y%m%d")
+    key = f'{systematic_name}-{valuation_date_str}'
+    logger.info('-------- %s --------', key)
+    if key in calib_results:
+        logger.info("skip (cached)")
+        return
+
+    T = EXPIRY_MAP[valuation_date.weekday()]
+    if (valuation_date >= pd.to_datetime('20250407')) and (valuation_date < pd.to_datetime('20250414')):
+        T = T - 1
+
+    mask  = (mkt_vol_df.underlying_symbol==systematic_name)
+    mask &= (mkt_vol_df.quote_date==valuation_date)
+    mask &= (mkt_vol_df.iEXPIRY==T)
+    mask &= (mkt_vol_df.dMONEYNESS >= 50.)
+    mask &= (mkt_vol_df.dMONEYNESS <= 150.)
+    tmp_df = mkt_vol_df.loc[mask].sort_values('dMONEYNESS')
+    if len(tmp_df) == 0:
+        logger.warning("no market vols for %s; skipping", key)
+        return
+
+    vol_fitter = KimYiSkewCalibrationSystematic(
+        mkt_imp_vol=tmp_df.dMKT_IMP_VOL.to_numpy(),
+        und_price=tmp_df.dUND_PRICE.to_numpy(),
+        und_strike=tmp_df.dUND_STRIKE.to_numpy(),
+        risk_free_rate=tmp_df.dRISK_FREE_RATE.to_numpy(),
+        dividend_yield=tmp_df.dDIVIDEND_YIELD.to_numpy(),
+        time_to_expiry=tmp_df.dEXPIRY.to_numpy(),
+        is_call_option=tmp_df.bIS_CALL_OPTION.to_numpy(),
+        option_weights=tmp_df.dVEGA.to_numpy() / tmp_df.dVEGA.sum(),
+    )
+    minimizer_results = minimize(
+        vol_fitter.target,
+        x0=initial_values_systematic,
+        method=method,
+        bounds=bounds_systematic.values(),
+        tol=1e-6,
+        options={'maxiter': 1e4},
+    )
+    logger.info("minimize result: %s", minimizer_results)
+    calib_results[key] = minimizer_results
+    save_calibration_results(calib_results, _kimyi_calib_parquet)
+
+
+def _calibrate_idiosyncratic_for(underlying_name, valuation_date):
+    valuation_date_str = valuation_date.strftime("%Y%m%d")
+    key = f'{underlying_name}-{valuation_date_str}'
+    logger.info('-------- %s --------', key)
+    if key in calib_results:
+        logger.info("skip (cached)")
+        return
+
+    T = EXPIRY_MAP[valuation_date.weekday()]
+    if (valuation_date >= pd.to_datetime('20250407')) and (valuation_date < pd.to_datetime('20250414')):
+        T = T - 1
+
+    mask  = (mkt_vol_df.underlying_symbol==underlying_name)
+    mask &= (mkt_vol_df.quote_date==valuation_date)
+    mask &= (mkt_vol_df.iEXPIRY==T)
+    mask &= (mkt_vol_df.dMONEYNESS >= 50.)
+    mask &= (mkt_vol_df.dMONEYNESS <= 150.)
+    tmp_df = mkt_vol_df.loc[mask].sort_values('dMONEYNESS')
+    if len(tmp_df) == 0:
+        logger.warning("no market vols for %s; skipping", key)
+        return
+
+    sys_key = f"{systematic_name}-{valuation_date_str}"
+    if sys_key not in calib_results:
+        logger.warning("systematic %s not calibrated yet; skipping %s", sys_key, key)
+        return
+    sigma, pprob, lamb, eta1, eta2 = calib_results[sys_key].x
+
+    vol_fitter = KimYiSkewCalibrationIdiosyncratic(
+        sigma=np.array(sigma),
+        pprob=np.array(pprob),
+        lamb=np.array(lamb),
+        eta1=np.array(eta1),
+        eta2=np.array(eta2),
+        mkt_imp_vol=tmp_df.dMKT_IMP_VOL.to_numpy(),
+        und_price=tmp_df.dUND_PRICE.to_numpy(),
+        und_strike=tmp_df.dUND_STRIKE.to_numpy(),
+        risk_free_rate=tmp_df.dRISK_FREE_RATE.to_numpy(),
+        dividend_yield=tmp_df.dDIVIDEND_YIELD.to_numpy(),
+        time_to_expiry=tmp_df.dEXPIRY.to_numpy(),
+        is_call_option=tmp_df.bIS_CALL_OPTION.to_numpy(),
+        option_weights=tmp_df.dVEGA.to_numpy() / tmp_df.dVEGA.sum(),
+    )
+    x0 = IDIOSYNCRATIC_X0_HINTS.get(
+        (underlying_name, valuation_date_str),
+        initial_values_idiosyncratic,
+    )
+    minimizer_results = minimize(
+        vol_fitter.target,
+        x0=x0,
+        method=method,
+        bounds=bounds_idiosyncratic.values(),
+        tol=1e-6,
+        options={'maxiter': 1e4},
+    )
+    logger.info("minimize result: %s", minimizer_results)
+    calib_results[key] = minimizer_results
+    save_calibration_results(calib_results, _kimyi_calib_parquet)
+
+
+# Systematic first (idiosyncratic step consumes systematic params).
+for valuation_date in valuation_date_array:
+    if valuation_date in mkt_vol_df.quote_date.unique():
+        _calibrate_systematic_for(valuation_date)
+
+for underlying_name in UND_TICKERS_DICT['idiosyncratic']:
     for valuation_date in valuation_date_array:
-
         if valuation_date in mkt_vol_df.quote_date.unique():
+            _calibrate_idiosyncratic_for(underlying_name, valuation_date)
 
-            valuation_date_str = valuation_date.strftime("%Y%m%d")
-
-            key = f'{systematic_name}-{valuation_date_str}'
-
-            logger.info('-------- %s --------', key)
-
-            if key in calib_results.keys():
-                pass
-            else:
-
-                results_ = {}
-
-                T = EXPIRY_MAP[valuation_date.weekday()]
-
-                if (valuation_date >= pd.to_datetime('20250407')) and (valuation_date < pd.to_datetime('20250414')):
-                    T = T - 1
-
-                mask  = (mkt_vol_df.underlying_symbol==systematic_name)
-                mask &= (mkt_vol_df.quote_date==valuation_date)
-                mask &= (mkt_vol_df.iEXPIRY==T)
-                mask &= (mkt_vol_df.dMONEYNESS >= 50.)
-                mask &= (mkt_vol_df.dMONEYNESS <= 150.)
-
-                tmp_df = mkt_vol_df.loc[mask].sort_values('dMONEYNESS')
-
-                vol_fitter = KimYiSkewCalibrationSystematic(
-                    mkt_imp_vol=tmp_df.dMKT_IMP_VOL.to_numpy(),
-                    und_price=tmp_df.dUND_PRICE.to_numpy(),
-                    und_strike=tmp_df.dUND_STRIKE.to_numpy(),
-                    risk_free_rate=tmp_df.dRISK_FREE_RATE.to_numpy(),
-                    dividend_yield=tmp_df.dDIVIDEND_YIELD.to_numpy(),
-                    time_to_expiry=tmp_df.dEXPIRY.to_numpy(),
-                    is_call_option=tmp_df.bIS_CALL_OPTION.to_numpy(),
-                    option_weights=tmp_df.dVEGA.to_numpy() / tmp_df.dVEGA.sum()
-                )
-
-                minimizer_results = minimize(
-                    vol_fitter.target,
-                    x0=initial_values_systematic,
-                    method=method,
-                    bounds=bounds_systematic.values(),
-                    tol=1e-6,
-                    options={'maxiter': 1e4}
-                )
-
-                logger.info("minimize result: %s", minimizer_results)
-
-                results_[valuation_date_str] = minimizer_results
-
-                calib_results[key] = minimizer_results
-
-
-    for underlying_name in UND_TICKERS_DICT['idiosyncratic']:
-        for valuation_date in valuation_date_array:
-
-            if valuation_date in mkt_vol_df.quote_date.unique():
-
-                valuation_date_str = valuation_date.strftime("%Y%m%d")
-
-                key = f'{underlying_name}-{valuation_date_str}'
-
-                logger.info('-------- %s --------', key)
-
-                if key in calib_results.keys():
-                    pass
-                else:
-                    results_ = {}
-
-                    T = EXPIRY_MAP[valuation_date.weekday()]
-
-                    if (valuation_date >= pd.to_datetime('20250407')) and (valuation_date < pd.to_datetime('20250414')):
-                        T = T - 1
-
-                    mask  = (mkt_vol_df.underlying_symbol==underlying_name)
-                    mask &= (mkt_vol_df.quote_date==valuation_date)
-                    mask &= (mkt_vol_df.iEXPIRY==T)
-                    mask &= (mkt_vol_df.dMONEYNESS >= 50.)
-                    mask &= (mkt_vol_df.dMONEYNESS <= 150.)
-
-                    tmp_df = mkt_vol_df.loc[mask].sort_values('dMONEYNESS')
-
-                    sigma, pprob, lamb, eta1, eta2 = calib_results[f"{systematic_name}-{valuation_date_str}"].x
-
-                    vol_fitter = KimYiSkewCalibrationIdiosyncratic(
-                        sigma=np.array(sigma),
-                        pprob=np.array(pprob),
-                        lamb=np.array(lamb),
-                        eta1=np.array(eta1),
-                        eta2=np.array(eta2),
-                        mkt_imp_vol=tmp_df.dMKT_IMP_VOL.to_numpy(),
-                        und_price=tmp_df.dUND_PRICE.to_numpy(),
-                        und_strike=tmp_df.dUND_STRIKE.to_numpy(),
-                        risk_free_rate=tmp_df.dRISK_FREE_RATE.to_numpy(),
-                        dividend_yield=tmp_df.dDIVIDEND_YIELD.to_numpy(),
-                        time_to_expiry=tmp_df.dEXPIRY.to_numpy(),
-                        is_call_option=tmp_df.bIS_CALL_OPTION.to_numpy(),
-                        option_weights=tmp_df.dVEGA.to_numpy() / tmp_df.dVEGA.sum()
-                    )
-
-                    minimizer_results = minimize(
-                        vol_fitter.target,
-                        x0=initial_values_idiosyncratic,
-                        method=method,
-                        bounds=bounds_idiosyncratic.values(),
-                        tol=1e-6,
-                        options={'maxiter': 1e4},
-                        # constraints=({'type': 'ineq', 'fun': psi_constraint_aggregate})
-                    )
-
-                    logger.info("minimize result: %s", minimizer_results)
-
-                    results_[valuation_date_str] = minimizer_results
-
-                    calib_results[key] = minimizer_results
-
-    file_path = str(_REPO_ROOT / "Study" / "Estimated Parameters QLSQ" / "kimyi2025_vol_calibration_.parquet")
-    save_calibration_results(calib_results, file_path)
-    logger.info("Saved kimyi2025 calibration to %s", file_path)
+# Final safety-net save (incremental saves already happened inside the helpers).
+save_calibration_results(calib_results, _kimyi_calib_parquet)
+logger.info("Saved kimyi2025 calibration to %s", _kimyi_calib_parquet)
 
 # %% cell 7
 logger.info("[cell %d/14] compute valuation_date", 7)
