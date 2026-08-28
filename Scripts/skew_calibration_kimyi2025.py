@@ -176,6 +176,30 @@ IDIOSYNCRATIC_X0_HINTS = {
 logger.info("[cell %d/14] Kim-Yi skew calibration loop (systematic + idiosyncratic)", 6)
 systematic_name = UND_TICKERS_DICT['systematic']
 
+# Optional single-date targeting. Set via --only-date YYYYMMDD or the
+# LIQUIDITY_SKEW_ONLY_DATE env var to (a) restrict the loops to that one
+# valuation date and (b) FORCE re-fit of that date's keys even if they are
+# already present in the parquet cache. Handy for one-off reruns like
+# repairing the COIN 2025-04-09 fit without redoing all dates.
+_only_date = os.environ.get("LIQUIDITY_SKEW_ONLY_DATE")
+import argparse as _argparse
+_p = _argparse.ArgumentParser(add_help=False)
+_p.add_argument("--only-date", default=_only_date)
+_args, _ = _p.parse_known_args()
+_only_date = _args.only_date
+if _only_date:
+    logger.info("--only-date=%s: restricting to that valuation date and forcing re-fit.", _only_date)
+    # Purge any cached entries for the targeted date so the loop re-runs them.
+    _drop = [k for k in calib_results if k.endswith(f"-{_only_date}")]
+    for _k in _drop:
+        calib_results.pop(_k)
+    logger.info("purged %d stale cache entries for %s: %s", len(_drop), _only_date, _drop)
+
+
+def _skip_date(valuation_date):
+    """True if --only-date is set and this valuation_date doesn't match."""
+    return _only_date is not None and valuation_date.strftime("%Y%m%d") != _only_date
+
 
 def _calibrate_systematic_for(valuation_date):
     valuation_date_str = valuation_date.strftime("%Y%m%d")
@@ -284,12 +308,12 @@ def _calibrate_idiosyncratic_for(underlying_name, valuation_date):
 
 # Systematic first (idiosyncratic step consumes systematic params).
 for valuation_date in valuation_date_array:
-    if valuation_date in mkt_vol_df.quote_date.unique():
+    if valuation_date in mkt_vol_df.quote_date.unique() and not _skip_date(valuation_date):
         _calibrate_systematic_for(valuation_date)
 
 for underlying_name in UND_TICKERS_DICT['idiosyncratic']:
     for valuation_date in valuation_date_array:
-        if valuation_date in mkt_vol_df.quote_date.unique():
+        if valuation_date in mkt_vol_df.quote_date.unique() and not _skip_date(valuation_date):
             _calibrate_idiosyncratic_for(underlying_name, valuation_date)
 
 # Final safety-net save (incremental saves already happened inside the helpers).
