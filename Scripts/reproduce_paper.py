@@ -73,9 +73,25 @@ STEPS = [
         "Table 1: P-MLE parameter estimates",
         _REPO_ROOT / "Scripts" / "run_pmle_kimyi2025.py",
     ),
+    # Skew calibration is a three-step pipeline:
+    #   (a) Kim-Yi QLSQ  -> Study/Estimated Parameters QLSQ/kimyi2025_vol_calibration.parquet
+    #   (b) Heston QLSQ  -> Study/Estimated Parameters QLSQ/heston1993_vol_calibration.parquet
+    #   (c) plot         -> Figures/Figure_4_*.pdf, Figure_5_*.pdf
+    # All three are gated by the same CONFIG flag; running only step (c) would
+    # crash if the two parquets are missing.
     (
         "figures_4_5_skew_calibration",
-        "Figures 4-5: Volatility skew calibration",
+        "Figures 4-5 (a): Kim-Yi QLSQ skew calibration",
+        _REPO_ROOT / "Scripts" / "skew_calibration_kimyi2025.py",
+    ),
+    (
+        "figures_4_5_skew_calibration",
+        "Figures 4-5 (b): Heston (1993) QLSQ skew calibration",
+        _REPO_ROOT / "Scripts" / "skew_calibration_heston1993.py",
+    ),
+    (
+        "figures_4_5_skew_calibration",
+        "Figures 4-5 (c): render market vs. calibrated skew plots",
         _REPO_ROOT / "Scripts" / "skew_calibration_main.py",
     ),
     (
