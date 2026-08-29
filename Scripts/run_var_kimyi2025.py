@@ -1222,8 +1222,8 @@ logger.info("[cell %d/27] aggregate scenario PVs into a VaR table", 24)
 # whatever dates have been computed (adaptive to partial runs).
 from matplotlib import cm as _cm  # noqa: E402
 
-def _compute_var_table(base_dir: Path = _SCENARIO_PV_DIR_TEMPLATE,
-                       t0_dir: Path = _CURRENT_PV_DIR_TEMPLATE,
+def _compute_var_table(base_dir=_SCENARIO_PV_DIR_TEMPLATE,
+                       t0_dir=_CURRENT_PV_DIR_TEMPLATE,
                        confidence: float = 0.99) -> pd.DataFrame:
     """Walk ScenarioPV/{date}/{date}_{scen}_{h}D_{ra}.parquet and produce a
     tidy table with columns
@@ -1281,7 +1281,7 @@ def _compute_var_table(base_dir: Path = _SCENARIO_PV_DIR_TEMPLATE,
                 continue
             # Portfolio PV per MC path = sum across positions per iSCENARIO_NUM.
             df["pv_sum"] = df["dPV"].apply(lambda x: float(np.asarray(x).sum()))
-            portfolio_pv = df.groupby("iSCENARIO_NUM")["pv_sum"].sum().values
+            portfolio_pv = df.groupby("iSCENARIO_NO")["pv_sum"].sum().values
             pnl = portfolio_pv - t0_portfolio
             var = float(-np.percentile(pnl, (1 - confidence) * 100))
             rows.append({

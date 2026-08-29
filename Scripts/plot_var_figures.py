@@ -106,7 +106,7 @@ def compute_var_table(confidence: float = 0.99) -> pd.DataFrame:
                 logger.warning("failed to read %s: %s", parquet, exc)
                 continue
             df["pv_sum"] = df["dPV"].apply(lambda x: float(np.asarray(x).sum()))
-            portfolio_pv = df.groupby("iSCENARIO_NUM")["pv_sum"].sum().values
+            portfolio_pv = df.groupby("iSCENARIO_NO")["pv_sum"].sum().values
             pnl = portfolio_pv - t0_portfolio
             var = float(-np.percentile(pnl, (1 - confidence) * 100))
             rows.append({
