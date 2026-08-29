@@ -65,7 +65,7 @@ _FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 _REPO_ROOT_STR = str(_REPO_ROOT) + "/"
 
 # %% cell 1
-logger.info("[cell %d/24] compute", 1)
+logger.info("[cell %d/27] compute", 1)
 import os
 import pickle
 import numpy as np
@@ -101,7 +101,7 @@ from matplotlib.ticker import StrMethodFormatter
 az.style.use("arviz-darkgrid")
 
 # %% cell 2
-logger.info("[cell %d/24] compute valuation_beg_dt", 2)
+logger.info("[cell %d/27] compute valuation_beg_dt", 2)
 valuation_beg_dt = '20250331'
 valuation_end_dt = '20250416'
 date_format = '%Y%m%d'
@@ -132,7 +132,7 @@ rates_data_df = ustcurve.nominalRates(pd.to_datetime(valuation_window_str[0]).st
 rates_data_df = pd.DataFrame(index=pd.bdate_range(rates_data_df.index.min(), rates_data_df.index.max())).join(rates_data_df).ffill(axis=1).bfill(axis=1).ffill().bfill()
 
 # %% cell 3
-logger.info("[cell %d/24] # MIGRATION: originally the ostensibly-first 'try:' cell mix", 3)
+logger.info("[cell %d/27] # MIGRATION: originally the ostensibly-first 'try:' cell mix", 3)
 # MIGRATION: originally the ostensibly-first "try:" cell mixed a DB connection
 # check with a pickle load of the vol surface. Only the pickle load is
 # actually needed by downstream cells (vol_surf_df). Path is now anchored at
@@ -147,7 +147,7 @@ except FileNotFoundError as e:
     raise
 
 # %% cell 4
-logger.info("[cell %d/24] # MIGRATION: this cell built the 'set_to_valuate_final_*' li", 4)
+logger.info("[cell %d/27] # MIGRATION: this cell built the 'set_to_valuate_final_*' li", 4)
 # MIGRATION: this cell built the 'set_to_valuate_final_*' lists by querying
 # pmle_params_kim_yi. Replaced by cached-file check via pmle_params_exists().
 set_to_valuate_final_systematic = [
@@ -217,7 +217,7 @@ set_to_valuate_final_idiosyncratic = [
 # LEGACY:     print("Database connection closed")
 
 # %% cell 5
-logger.info("[cell %d/24] define pmle_kimyirisk_systematic_helper()", 5)
+logger.info("[cell %d/27] define pmle_kimyirisk_systematic_helper()", 5)
 def pmle_kimyirisk_systematic_helper(args) -> List[tuple]:
 
     valuation_dt, return_vector, delta_t, seed_number, n_mc_paths, systematic_id, idiosyncratic_id = args
@@ -263,7 +263,7 @@ def pmle_kimyirisk_idiosyncratic_helper(args) -> List[tuple]:
     return results_list
 
 # %% cell 6
-logger.info("[cell %d/24] # LEGACY: if len(set_to_valuate_final_systematic) > 0:", 6)
+logger.info("[cell %d/27] # LEGACY: if len(set_to_valuate_final_systematic) > 0:", 6)
 
 # LEGACY: if len(set_to_valuate_final_systematic) > 0:
 # LEGACY:     systematic_arg_list = []
@@ -272,7 +272,7 @@ logger.info("[cell %d/24] # LEGACY: if len(set_to_valuate_final_systematic) > 0:
 # LEGACY:         systematic_arg_list.append((dt, return_vector, delta_t, seed_number, n_mc_paths, sys_id, idi_id))
 
 # %% cell 7
-logger.info("[cell %d/24] # MIGRATION: this cell calibrated missing systematic paramet", 7)
+logger.info("[cell %d/27] # MIGRATION: this cell calibrated missing systematic paramet", 7)
 # MIGRATION: this cell calibrated missing systematic parameters and INSERTED
 # them into the DB. For a clean run, call Scripts/run_pmle_kimyi2025.py
 # beforehand to populate all cached parameter CSVs. If you need to
@@ -328,7 +328,7 @@ logger.info("[cell %d/24] # MIGRATION: this cell calibrated missing systematic p
 # LEGACY:                 print("Database connection closed")
 
 # %% cell 8
-logger.info("[cell %d/24] # MIGRATION: this cell re-queried the systematic parameters ", 8)
+logger.info("[cell %d/27] # MIGRATION: this cell re-queried the systematic parameters ", 8)
 # MIGRATION: this cell re-queried the systematic parameters after cell 6.
 # With cached CSVs, no re-query is needed — subsequent cells read directly
 # via get_pmle_params_dict(date, ticker).
@@ -359,7 +359,7 @@ logger.info("[cell %d/24] # MIGRATION: this cell re-queried the systematic param
 # LEGACY:     print("Database connection closed")
 
 # %% cell 9
-logger.info("[cell %d/24] # MIGRATION: this cell calibrated missing idiosyncratic para", 9)
+logger.info("[cell %d/27] # MIGRATION: this cell calibrated missing idiosyncratic para", 9)
 # MIGRATION: this cell calibrated missing idiosyncratic parameters and
 # INSERTED them into the DB. Same replacement as cell 6.
 
@@ -411,7 +411,7 @@ logger.info("[cell %d/24] # MIGRATION: this cell calibrated missing idiosyncrati
 # LEGACY:             print("Database connection closed")
 
 # %% cell 10
-logger.info("[cell %d/24] # MIGRATION: this cell built the params_df dataframe from a ", 10)
+logger.info("[cell %d/27] # MIGRATION: this cell built the params_df dataframe from a ", 10)
 # MIGRATION: this cell built the params_df dataframe from a SELECT. Replaced
 # by a loop that assembles the same long-form structure from the cached CSVs.
 # The cached CSVs store all 11 parameters for both systematic and
@@ -467,7 +467,7 @@ params_df = pd.DataFrame(_rows)
 # LEGACY:     print("Database connection closed")
 
 # %% cell 11
-logger.info("[cell %d/24] define simulate_shock_returns_systematic_helper()", 11)
+logger.info("[cell %d/27] define simulate_shock_returns_systematic_helper()", 11)
 def simulate_shock_returns_systematic_helper(inputs: dict) -> dict:
     id = inputs["sID"]
     valuation_date = inputs["sVALUATION_DATE"]
@@ -596,7 +596,7 @@ def est_liquidity_process_idi_helper(inputs: dict) -> dict:
     return {f"{id}-{valuation_date}-{scenario_number}": ret}
 
 # %% cell 12
-logger.info("[cell %d/24] compute point_in_time_dt", 12)
+logger.info("[cell %d/27] compute point_in_time_dt", 12)
 point_in_time_dt = '20250416'   # last valuation date; ensures Figure 6 timeline includes all annotated events (Apr 2 and Apr 9 pause).
 
 inputs_sys = []
@@ -662,7 +662,7 @@ for dt, idi_id in product([pd.to_datetime(point_in_time_dt)], get_idiosyncratic_
             )
 
 # %% cell 13
-logger.info("[cell %d/24] multiprocessing.set_start_method('fork', force=True)", 13)
+logger.info("[cell %d/27] multiprocessing.set_start_method('fork', force=True)", 13)
 if __name__=='__main__':
     import multiprocessing
     from concurrent.futures import ProcessPoolExecutor
@@ -709,7 +709,7 @@ if __name__=='__main__':
 # cell 13 remain in scope for the downstream VaR pricing cells.
 
 # %% cell 14
-logger.info("[cell %d/24] # MIGRATION: this cell queried the portfolio table. Replaced", 14)
+logger.info("[cell %d/27] # MIGRATION: this cell queried the portfolio table. Replaced", 14)
 # MIGRATION: this cell queried the portfolio table. Replaced by
 # build_portfolio() from Scripts.load_portfolio, materialised for every
 # (valuation date, idiosyncratic asset) combination in the window. Column
@@ -745,7 +745,7 @@ pos_df.columns = [c.lower() for c in pos_df.columns]
 # LEGACY:     print("Database connection closed")
 
 # %% cell 15
-logger.info("[cell %d/24] define get_pv()", 15)
+logger.info("[cell %d/27] define get_pv()", 15)
 def get_pv(args_dict: dict) -> dict:
 
     sTYPOLOGY = args_dict["sTYPOLOGY"]
@@ -892,7 +892,7 @@ def _get_pv_exotic(args: dict) -> dict:
     return output
 
 # %% cell 16
-logger.info("[cell %d/24] define compound_relative_returns()", 16)
+logger.info("[cell %d/27] define compound_relative_returns()", 16)
 def compound_relative_returns(returns):
     returns = 1. + returns
     for i in range(1, returns.shape[1]):
@@ -900,7 +900,7 @@ def compound_relative_returns(returns):
     return returns - 1.
 
 # %% cell 17
-logger.info("[cell %d/24] define prepare_data_for_pricing()", 17)
+logger.info("[cell %d/27] define prepare_data_for_pricing()", 17)
 def prepare_data_for_pricing(ser: namedtuple, spot_shock_dict: dict = None) -> dict:
 
     sID = ser.sidiosyncratic_id
@@ -993,7 +993,7 @@ def prepare_data_for_pricing(ser: namedtuple, spot_shock_dict: dict = None) -> d
     return args
 
 # %% cell 18
-logger.info("[cell %d/24] compute args_list", 18)
+logger.info("[cell %d/27] compute args_list", 18)
 args_list = []
 args_list_delta_up = []
 args_list_delta_dn = []
@@ -1024,7 +1024,7 @@ for row in pos_tmp_df.itertuples(index=False):
     args_list_delta_dn.append(prepare_data_for_pricing(row, spot_shock_dict_delta_dn))
 
 # %% cell 19
-logger.info("[cell %d/24] compute pv_df", 19)
+logger.info("[cell %d/27] compute pv_df", 19)
 pv_df = []
 pv_up_df = []
 pv_dn_df = []
@@ -1086,7 +1086,7 @@ _save_pv_parquet(pv_up_df, str(_current_pv_date_dir / f"{point_in_time_dt}_pv_up
 _save_pv_parquet(pv_dn_df, str(_current_pv_date_dir / f"{point_in_time_dt}_pv_dn.parquet"))
 
 # %% cell 20
-logger.info("[cell %d/24] compute ScenarioInputs", 20)
+logger.info("[cell %d/27] compute ScenarioInputs", 20)
 ScenarioInputs = namedtuple(typename="ScenarioInputs", field_names=list(pos_tmp_df.columns))
 scenario_inputs_list = []
 
@@ -1094,7 +1094,7 @@ for tup in pos_tmp_df.itertuples(index=False):
     scenario_inputs_list.append(ScenarioInputs(*list(tup)))
 
 # %% cell 21
-logger.info("[cell %d/24] define get_scenario_dict()", 21)
+logger.info("[cell %d/27] define get_scenario_dict()", 21)
 def get_scenario_dict(
         return_assumption: str,
         scenario: str,
@@ -1112,7 +1112,7 @@ def get_scenario_dict(
     return spot_shock_dict
 
 # %% cell 22
-logger.info("[cell %d/24] define save_scenario_positions()", 22)
+logger.info("[cell %d/27] define save_scenario_positions()", 22)
 def save_scenario_positions(args) -> None:
 
     scenario_inputs_list, risk_horizon, scenario_key, return_assumption = args
@@ -1153,40 +1153,36 @@ def save_scenario_positions(args) -> None:
     # except Exception as e:
     #     print(f"An error occured: {e}")
 
+    # Compute + persist the P&L for every what-if scenario. Figure 3 (VaR
+    # surface) needs the full (gamma, beta, rho) lattice, so restricting this
+    # to SCEN_0 would leave Figure 3 unrenderable.
     pv_list = []
+    for tup in scenario_inputs_list:
+        iEXPIRY  = pd.bdate_range(start=tup.svaluation_date, end=tup.sexpiry_date).shape[0] - 1
+        iEXPIRY_ = iEXPIRY - risk_horizon
+        risk_horizon_ = np.minimum(np.maximum(iEXPIRY_, iEXPIRY), risk_horizon)
 
-    if scenario_key == 'SCEN_0':
+        spot_shock_vector = compound_returns[:, risk_horizon_]
 
-        for tup in scenario_inputs_list:
-            iEXPIRY  = pd.bdate_range(start=tup.svaluation_date, end=tup.sexpiry_date).shape[0] - 1
-            iEXPIRY_ = iEXPIRY - risk_horizon
-            risk_horizon_ = np.minimum(np.maximum(iEXPIRY_, iEXPIRY), risk_horizon)
+        for scenario_number, spot_shock in enumerate(spot_shock_vector):
+            spot_shock_dict = get_scenario_dict(
+                return_assumption=return_assumption,
+                scenario=scenario_key,
+                scenario_number=scenario_number,
+                risk_horizon=risk_horizon,
+                spot_shock=spot_shock
+            )
 
-            spot_shock_vector = compound_returns[:, risk_horizon_]
+            pv_list.append(get_pv(prepare_data_for_pricing(ser=tup, spot_shock_dict=spot_shock_dict)))
 
-            for scenario_number, spot_shock in enumerate(spot_shock_vector):
-                spot_shock_dict = get_scenario_dict(
-                    return_assumption=return_assumption,
-                    scenario=scenario_key,
-                    scenario_number=scenario_number,
-                    risk_horizon=risk_horizon,
-                    spot_shock=spot_shock
-                )
-
-                pv_list.append(get_pv(prepare_data_for_pricing(ser=tup, spot_shock_dict=spot_shock_dict)))
-
-        _scenario_pv_date_dir = _SCENARIO_PV_DIR_TEMPLATE / point_in_time_dt
-        _scenario_pv_date_dir.mkdir(parents=True, exist_ok=True)
-        file_path = str(_scenario_pv_date_dir / f"{point_in_time_dt}_{scenario_key}_{risk_horizon}D_{return_assumption}.parquet")
-        _save_pv_parquet(pv_list, file_path)
-
-    else:
-        return None
-
+    _scenario_pv_date_dir = _SCENARIO_PV_DIR_TEMPLATE / point_in_time_dt
+    _scenario_pv_date_dir.mkdir(parents=True, exist_ok=True)
+    file_path = str(_scenario_pv_date_dir / f"{point_in_time_dt}_{scenario_key}_{risk_horizon}D_{return_assumption}.parquet")
+    _save_pv_parquet(pv_list, file_path)
     return None
 
 # %% cell 23
-logger.info("[cell %d/24] compute return_assumption", 23)
+logger.info("[cell %d/27] compute return_assumption", 23)
 return_assumption = ["LA"]
 risk_horizons = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
@@ -1203,5 +1199,192 @@ if __name__=='__main__':
             result
 
 # %% cell 24
-logger.info("[cell %d/24] ", 24)
+logger.info("[cell %d/27] aggregate scenario PVs into a VaR table", 24)
+# Sum per-position PVs into portfolio PV per MC path per scenario, subtract
+# the T0 portfolio value, and take the 1st percentile as 99% VaR. This
+# produces the DataFrame that Figures 3 and 7 consume. It reads directly
+# from Study/Collar Asian/ScenarioPV/{date}/*.parquet so it works with
+# whatever dates have been computed (adaptive to partial runs).
+from matplotlib import cm as _cm  # noqa: E402
+
+def _compute_var_table(base_dir: Path = _SCENARIO_PV_DIR_TEMPLATE,
+                       t0_dir: Path = _CURRENT_PV_DIR_TEMPLATE,
+                       confidence: float = 0.99) -> pd.DataFrame:
+    """Walk ScenarioPV/{date}/{date}_{scen}_{h}D_{ra}.parquet and produce a
+    tidy table with columns
+        [date, scenario, return_assumption, horizon_days,
+         gamma, beta, rho, var]
+    """
+    if not base_dir.exists():
+        logger.warning("ScenarioPV dir missing: %s", base_dir)
+        return pd.DataFrame()
+    scen_meta = what_if_scenario_df.reset_index().rename(
+        columns={"sSCENARIO": "scenario"}
+    )
+    # SCEN_0 is the current calibration; add it with the model-current
+    # (gamma, beta, rho) triple so it can appear on the surface too.
+    _series0 = params_df.loc[
+        (params_df.sidiosyncratic_id == "COIN")
+        & (params_df.svalue_statistics_desc == "dMEAN")
+        & (params_df.svaluation_date == point_in_time_dt),
+        ["sparameter", "svalue_statistics"],
+    ].set_index("sparameter").svalue_statistics
+    scen_meta = pd.concat([
+        pd.DataFrame([{
+            "scenario": "SCEN_0",
+            "dGAMMAI": float(_series0.get("dGAMMAI", np.nan)),
+            "dBETAI":  float(_series0.get("dBETAI",  np.nan)),
+            "dRHOIX":  float(_series0.get("dRHOIX",  np.nan)),
+        }]),
+        scen_meta,
+    ], ignore_index=True).drop_duplicates("scenario", keep="first")
+
+    rows = []
+    for date_dir in sorted(p for p in base_dir.iterdir() if p.is_dir()):
+        date_str = date_dir.name
+        t0_path = t0_dir / date_str / f"{date_str}_pv.parquet"
+        if not t0_path.exists():
+            logger.warning("missing T0 PV parquet for %s; skipping date", date_str)
+            continue
+        t0_df = pd.read_parquet(t0_path)
+        t0_portfolio = float(sum(np.asarray(x).sum() for x in t0_df["dPV"]))
+
+        for parquet in sorted(date_dir.glob(f"{date_str}_*.parquet")):
+            # Parse filename: {date}_{scen}_{h}D_{return_assumption}.parquet
+            stem = parquet.stem[len(date_str) + 1:]  # strip "20250416_"
+            parts = stem.rsplit("_", 2)              # ["SCEN_12", "10D", "LA"]
+            if len(parts) != 3:
+                continue
+            scenario, horizon_str, ra = parts
+            if not horizon_str.endswith("D"):
+                continue
+            horizon = int(horizon_str[:-1])
+            try:
+                df = pd.read_parquet(parquet)
+            except Exception as exc:
+                logger.warning("failed to read %s: %s", parquet, exc)
+                continue
+            # Portfolio PV per MC path = sum across positions per iSCENARIO_NUM.
+            df["pv_sum"] = df["dPV"].apply(lambda x: float(np.asarray(x).sum()))
+            portfolio_pv = df.groupby("iSCENARIO_NUM")["pv_sum"].sum().values
+            pnl = portfolio_pv - t0_portfolio
+            var = float(-np.percentile(pnl, (1 - confidence) * 100))
+            rows.append({
+                "date": date_str,
+                "scenario": scenario,
+                "return_assumption": ra,
+                "horizon_days": horizon,
+                "var": var,
+                "pnl": pnl,
+            })
+    var_df = pd.DataFrame(rows)
+    if var_df.empty:
+        logger.warning("No scenario PV parquets found under %s", base_dir)
+        return var_df
+    var_df = var_df.merge(scen_meta, on="scenario", how="left")
+    var_df = var_df.rename(columns={"dGAMMAI": "gamma", "dBETAI": "beta", "dRHOIX": "rho"})
+    logger.info("VaR table: %d rows across %d dates, %d scenarios, %d horizons",
+                len(var_df),
+                var_df["date"].nunique(),
+                var_df["scenario"].nunique(),
+                var_df["horizon_days"].nunique())
+    return var_df
+
+
+var_df = _compute_var_table()
+
+# %% cell 25
+logger.info("[cell %d/27] Figure 3: VaR surface across (gamma, beta) at rho slices", 25)
+if var_df.empty:
+    logger.warning("Figure 3 skipped: no VaR data available.")
+else:
+    # 2 x 3 grid: rows are h in {1, 10}, cols are rho in {-1, 0, 1}.
+    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 (registers 3d)
+    rho_slices = [-1.0, 0.0, 1.0]
+    horizons_fig3 = [1, 10]
+    fig3, axes3 = plt.subplots(
+        len(horizons_fig3), len(rho_slices),
+        figsize=(18, 10), subplot_kw={"projection": "3d"},
+    )
+    # Filter to Figure 3's valuation date (default point_in_time_dt).
+    fig3_var = var_df.loc[var_df["date"] == point_in_time_dt].copy()
+    for r_i, h in enumerate(horizons_fig3):
+        for c_i, rho_target in enumerate(rho_slices):
+            ax = axes3[r_i, c_i]
+            sub = fig3_var.loc[
+                (fig3_var["horizon_days"] == h)
+                & (np.isclose(fig3_var["rho"], rho_target, atol=1e-3))
+            ]
+            if sub.empty:
+                ax.set_title(f"h={h}, rho={rho_target} (no data)", fontsize=9)
+                continue
+            grid = sub.pivot_table(index="beta", columns="gamma", values="var")
+            G, B = np.meshgrid(grid.columns.values, grid.index.values)
+            V = grid.values
+            surf = ax.plot_surface(G, B, V, cmap=_cm.coolwarm, edgecolor="none")
+            ax.set_title(rf"$h={h},\ \rho_{{i,X}}={rho_target}$", fontsize=10, fontweight="bold")
+            ax.set_xlabel(r"$\gamma_i$")
+            ax.set_ylabel(r"$\beta_i$")
+            ax.view_init(elev=25, azim=-45)
+    fig3.suptitle("99% VaR in ($)", fontsize=13, fontweight="bold")
+    plt.tight_layout()
+    _fig3_path = _FIGURES_DIR / f"Figure_3_VaR_surface_{point_in_time_dt}.pdf"
+    plt.savefig(str(_fig3_path), dpi=300)
+    logger.info("Saved %s", _fig3_path)
+    plt.show()
+
+# %% cell 26
+logger.info("[cell %d/27] Figure 7: VaR term structure with 95%% CI", 26)
+if var_df.empty:
+    logger.warning("Figure 7 skipped: no VaR data available.")
+else:
+    def _bootstrap_var_ci(pnl: np.ndarray, confidence: float = 0.99,
+                          n_boot: int = 10_000, ci: float = 0.95,
+                          seed: int = 20250101):
+        rng_ = np.random.default_rng(seed)
+        n = len(pnl)
+        pcts = np.empty(n_boot)
+        for i in range(n_boot):
+            sample = rng_.choice(pnl, size=n, replace=True)
+            pcts[i] = -np.percentile(sample, (1 - confidence) * 100)
+        alpha = (1 - ci) / 2
+        return float(np.quantile(pcts, alpha)), float(np.quantile(pcts, 1 - alpha))
+
+    fig7_var = var_df.loc[
+        (var_df["scenario"] == "SCEN_0")
+        & (var_df["return_assumption"] == "LA")
+    ].copy()
+    if fig7_var.empty:
+        logger.warning("Figure 7 skipped: no SCEN_0 LA rows.")
+    else:
+        # Bootstrap CIs (once per (date, horizon)).
+        boot = []
+        for (dt, h), grp in fig7_var.groupby(["date", "horizon_days"]):
+            lo, hi = _bootstrap_var_ci(grp["pnl"].iloc[0])
+            boot.append({"date": dt, "horizon_days": h, "var_lo": lo, "var_hi": hi})
+        fig7_var = fig7_var.merge(pd.DataFrame(boot), on=["date", "horizon_days"])
+
+        fig7, ax7 = plt.subplots(figsize=(12, 6))
+        _palette = plt.get_cmap("tab10")
+        for i, (dt, grp) in enumerate(fig7_var.sort_values("horizon_days").groupby("date")):
+            color = _palette(i)
+            label = f"{pd.to_datetime(dt).strftime('%d-%b-%Y')} with 95% CI"
+            ax7.plot(grp["horizon_days"], grp["var"], marker="o",
+                     linestyle="-" if i == 0 else "--", color=color, label=label)
+            ax7.fill_between(grp["horizon_days"], grp["var_lo"], grp["var_hi"],
+                             color=color, alpha=0.2)
+        ax7.set_xlabel("Risk Horizon (Days)", fontweight="bold")
+        ax7.set_ylabel(r"$\bf VaR_{LA}$ ($)", fontweight="bold")
+        ax7.set_title(r"Evolution of 99% Liquidity Adjusted Value-at-Risk (VaR$_{LA}$) "
+                      r"Term Structure with 95% Confidence Interval (CI)",
+                      fontweight="bold")
+        ax7.legend(title="Portfolio Valuation Date", title_fontproperties={"weight": "bold"})
+        ax7.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(1))
+        _fig7_path = _FIGURES_DIR / "Figure_7_VaR_termstructure.pdf"
+        plt.savefig(str(_fig7_path), dpi=300)
+        logger.info("Saved %s", _fig7_path)
+        plt.show()
+
+# %% cell 27
+logger.info("[cell %d/27] ", 27)
 
