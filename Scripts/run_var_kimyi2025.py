@@ -999,6 +999,21 @@ args_list_delta_up = []
 args_list_delta_dn = []
 what_if_scenarios_keys = sorted(list(what_if_scenarios_dict.keys()))
 
+# Optional scenario filter for fast reruns. Set LIQUIDITY_VAR_SCENARIOS=
+#   "SCEN_0"                   -> only base scenario (Figure 7 only, minutes)
+#   "SCEN_0,SCEN_10,SCEN_50"   -> specific subset
+#   unset / empty              -> full lattice (Figure 3 + Figure 7, ~hours)
+_env_scen_filter = os.environ.get("LIQUIDITY_VAR_SCENARIOS", "").strip()
+if _env_scen_filter:
+    _wanted = {s.strip() for s in _env_scen_filter.split(",") if s.strip()}
+    _kept = [k for k in what_if_scenarios_keys if k in _wanted]
+    _skipped = len(what_if_scenarios_keys) - len(_kept)
+    what_if_scenarios_keys = _kept
+    logger.info(
+        "LIQUIDITY_VAR_SCENARIOS=%r: keeping %d scenario(s), skipping %d.",
+        _env_scen_filter, len(_kept), _skipped,
+    )
+
 spot_shock_dict_delta_up = {
     'sRETURN_ASSUMPTION': None,
     'sSCENARIO': None,
