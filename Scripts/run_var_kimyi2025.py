@@ -597,7 +597,13 @@ def est_liquidity_process_idi_helper(inputs: dict) -> dict:
 
 # %% cell 12
 logger.info("[cell %d/27] compute point_in_time_dt", 12)
-point_in_time_dt = '20250416'   # last valuation date; ensures Figure 6 timeline includes all annotated events (Apr 2 and Apr 9 pause).
+# Default: last valuation date (ensures Figure 6 timeline includes all
+# annotated events -- Apr 2 and Apr 9 pause).
+# Override via LIQUIDITY_POINT_IN_TIME_DT=YYYYMMDD for the Figure 7
+# term-structure dates (paper uses 20250403 and 20250409). Run the script
+# once per date; each run appends to Study/Collar Asian/ScenarioPV/{date}/.
+point_in_time_dt = os.environ.get("LIQUIDITY_POINT_IN_TIME_DT", "20250416")
+logger.info("point_in_time_dt = %s", point_in_time_dt)
 
 inputs_sys = []
 inputs_idi = []
