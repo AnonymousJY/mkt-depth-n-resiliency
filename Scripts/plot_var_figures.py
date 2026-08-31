@@ -166,15 +166,19 @@ def plot_figure_3(var_df: pd.DataFrame, point_in_time_dt: str) -> Path:
             if sub.empty:
                 ax.set_title(f"h={h}, rho={rho_target} (no data)", fontsize=9)
                 continue
-            grid = sub.pivot_table(index="beta", columns="gamma", values="var")
-            G, B = np.meshgrid(grid.columns.values, grid.index.values)
+            # Paper Figure 3 puts gamma_i on the near-right axis and beta_i on
+            # the near-left. Pivot with beta as columns so beta becomes the X
+            # (near-left) axis and gamma becomes Y (near-right).
+            grid = sub.pivot_table(index="gamma", columns="beta", values="var")
+            B, G = np.meshgrid(grid.columns.values, grid.index.values)
             V = grid.values
-            ax.plot_surface(G, B, V, cmap=_cm.coolwarm, edgecolor="none")
+            ax.plot_surface(B, G, V, cmap=_cm.coolwarm, edgecolor="none")
             ax.set_title(rf"$h={h},\ \rho_{{i,X}}={rho_target}$",
                          fontsize=10, fontweight="bold")
-            ax.set_xlabel(r"$\gamma_i$")
-            ax.set_ylabel(r"$\beta_i$")
-            ax.view_init(elev=25, azim=-45)
+            ax.set_xlabel(r"$\beta_i$")
+            ax.set_ylabel(r"$\gamma_i$")
+            # Match the paper's default matplotlib 3D view.
+            ax.view_init(elev=30, azim=-60)
     fig.suptitle("99% VaR in ($)", fontsize=13, fontweight="bold")
     plt.tight_layout()
     out = _FIGURES_DIR / f"Figure_3_VaR_surface_{point_in_time_dt}.pdf"
