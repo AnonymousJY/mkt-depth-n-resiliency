@@ -156,6 +156,20 @@ def plot_figure_3(var_df: pd.DataFrame, point_in_time_dt: str) -> Path:
         len(horizons), len(rho_slices),
         figsize=(18, 10), subplot_kw={"projection": "3d"},
     )
+    # Global vmin/vmax across every (h, rho) panel we're about to plot -- the
+    # paper uses a SHARED color scale so a low-VaR h=1 panel reads mostly
+    # blue while a high-VaR h=10 panel reads red, letting the reader compare
+    # magnitudes across panels. Per-panel auto-normalisation would rescale
+    # every surface to blue->red regardless of absolute VaR.
+    _mask_fig3 = (
+        fig3_var["horizon_days"].isin(horizons)
+        & fig3_var["rho"].apply(lambda r: any(np.isclose(r, rt, atol=1e-3) for rt in rho_slices))
+    )
+    _scale_vals = fig3_var.loc[_mask_fig3, "var"].dropna().values
+    if _scale_vals.size:
+        vmin_global, vmax_global = float(_scale_vals.min()), float(_scale_vals.max())
+    else:
+        vmin_global, vmax_global = None, None
     for r_i, h in enumerate(horizons):
         for c_i, rho_target in enumerate(rho_slices):
             ax = axes[r_i, c_i]
@@ -172,7 +186,11 @@ def plot_figure_3(var_df: pd.DataFrame, point_in_time_dt: str) -> Path:
             grid = sub.pivot_table(index="gamma", columns="beta", values="var")
             B, G = np.meshgrid(grid.columns.values, grid.index.values)
             V = grid.values
-            ax.plot_surface(B, G, V, cmap=_cm.coolwarm, edgecolor="none")
+            ax.plot_surface(
+                B, G, V,
+                cmap=_cm.coolwarm, edgecolor="none",
+                vmin=vmin_global, vmax=vmax_global,
+            )
             ax.set_title(rf"$h={h},\ \rho_{{i,X}}={rho_target}$",
                          fontsize=10, fontweight="bold")
             ax.set_xlabel(r"$\beta_i$")
